@@ -46,14 +46,13 @@ jobs:
           TC_BIN="$HOME/xtensa-esp-elf/bin"
           make all \
             TOOLCHAIN="$TC_BIN" \
-            CC="$TC_BIN/xtensa-esp-elf-gcc" \
             ESPTOOL="esptool.py"
 
       - name: Show output
         run: |
           TC_BIN="$HOME/xtensa-esp-elf/bin"
-          "$TC_BIN/xtensa-esp-elf-readelf" -h app.elf | grep -E "Machine|Data|Class"
-          "$TC_BIN/xtensa-esp-elf-size" app.elf || true
+          "$TC_BIN/xtensa-esp32-elf-readelf" -h app.elf | grep -E "Machine|Data|Class"
+          "$TC_BIN/xtensa-esp32-elf-size" app.elf || true
           ls -la app.elf *.bin
 
       - name: Upload build
