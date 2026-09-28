@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install esptool
-        run: pip install esptool
+        run: pip install "esptool==4.8.1"
 
       - name: Cache Xtensa toolchain
         id: tccache
@@ -51,8 +51,10 @@ jobs:
 
       - name: Show output
         run: |
-          ls -la app.elf app.bin
-          "$HOME/xtensa-esp-elf/bin/xtensa-esp-elf-size" app.elf || true
+          TC_BIN="$HOME/xtensa-esp-elf/bin"
+          "$TC_BIN/xtensa-esp-elf-readelf" -h app.elf | grep -E "Machine|Data|Class"
+          "$TC_BIN/xtensa-esp-elf-size" app.elf || true
+          ls -la app.elf *.bin
 
       - name: Upload build
         uses: actions/upload-artifact@v4
@@ -60,5 +62,5 @@ jobs:
           name: SyntropyOS
           path: |
             app.elf
-            app.bin
+            *.bin
           if-no-files-found: error
