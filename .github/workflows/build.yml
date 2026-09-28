@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     env:
       TC_VERSION: esp-14.2.0_20241119
@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -28,7 +28,7 @@ jobs:
 
       - name: Cache Xtensa toolchain
         id: tccache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/xtensa-esp-elf
           key: xtensa-esp-elf-${{ env.TC_VERSION }}
@@ -51,15 +51,15 @@ jobs:
       - name: Show output
         run: |
           TC_BIN="$HOME/xtensa-esp-elf/bin"
-          "$TC_BIN/xtensa-esp32-elf-readelf" -h app.elf | grep -E "Machine|Data|Class"
-          "$TC_BIN/xtensa-esp32-elf-size" app.elf || true
-          ls -la app.elf *.bin
+          "$TC_BIN/xtensa-esp32-elf-readelf" -h syntropyOS.elf | grep -E "Machine|Data|Class"
+          "$TC_BIN/xtensa-esp32-elf-size" syntropyOS.elf || true
+          ls -la syntropyOS.elf *.bin
 
       - name: Upload build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SyntropyOS
           path: |
-            app.elf
+            syntropyOS.elf
             *.bin
           if-no-files-found: error
