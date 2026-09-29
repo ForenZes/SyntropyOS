@@ -5,4 +5,7 @@
 // https://forenzes.com
 // 
 
-//TBD
+#include <stdint.h>
+#include "Kernel.h"
+
+int deviceType = 1;

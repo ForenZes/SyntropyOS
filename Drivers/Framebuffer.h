@@ -1,4 +1,12 @@
+//
+// SyntropyOS
+// (C) ForenZes Labs, 2026
+// Developed by GeoSn0w (@FCE365)
+// https://forenzes.com
+// 
+
 #ifndef FRAMEBUFFER_H
+
 #define FRAMEBUFFER_H
 
 #include <stdint.h>

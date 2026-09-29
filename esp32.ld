@@ -7,9 +7,16 @@ MEMORY
 }
 
 _stack_top = 0x3FFDC000;
+_kernel_stack_size = 0x4000;
 
 SECTIONS
 {
+    .vectors : ALIGN(0x400)
+    {
+        _syVectorBase = ABSOLUTE(.);
+        KEEP(*(.vectors))
+    } > iram
+    
     .text : ALIGN(4)
     {
         *(.literal.start)
@@ -28,6 +35,11 @@ SECTIONS
         *(.data .data.*)
     } > dram
 
+    .stacks (NOLOAD) : ALIGN(16)
+    {
+        *(.stacks .stacks.*)
+    } > dram
+
     .bss : ALIGN(4)
     {
         _bss_start = ABSOLUTE(.);
@@ -36,3 +48,8 @@ SECTIONS
         _bss_end = ABSOLUTE(.);
     } > dram
 }
+
+_kernel_stack_limit = _stack_top - _kernel_stack_size;
+
+ASSERT(_bss_end <= _kernel_stack_limit,
+    "SyntropyOS: DRAM overflow: .bss reaches into the kernel stack reserve. Shrink static data or move code to XIP.")
