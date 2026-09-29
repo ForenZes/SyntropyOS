@@ -1,3 +1,10 @@
+//
+// SyntropyOS
+// (C) ForenZes Labs, 2026
+// Developed by GeoSn0w (@FCE365)
+// https://forenzes.com
+// 
+
 #include "UserSpace.h"
 #include "Framebuffer.h"
 #include "TouchScreen.h"
@@ -5,6 +12,7 @@
 #include "Kernel.h"
 #include "Console.h"
 #include "GraphicsCache.h"
+#include "UART.h"
 
 bool SetupDoneAllSteps = false;
 
@@ -96,11 +104,6 @@ void touchScreenCalibrationApp(){
     return;
 }
 
-static uint32_t networkConnStack[256];   // 1 KB each, static so they persist
-static uint32_t syntropyGUIStack[256];
-static syThread_t networkConnThread;
-static syThread_t syntropyGUIThread;
-
 void alertSetMessage(const char *message){
     int boxX = 16;
     int boxWidth = 289;
@@ -148,9 +151,56 @@ static void *syntropyGUI(void *arg){
     return 0;
 }
 
+static uint32_t networkConnStack[256];   // 1 KB each, static so they persist
+static uint32_t syntropyGUIStack[256];
+static syThread_t networkConnThread;
+static syThread_t syntropyGUIThread;
+
+
+static uint32_t overflowStack[256];
+static syThread_t overflowThread;
+
+static int syRecurseForever(int depth){
+    volatile int marker[8];
+    marker[0] = depth;
+    if(depth > 1000000){
+        return marker[0];
+    }
+    return syRecurseForever(depth + 1) + marker[0];
+}
+
+static void *syStackBomb(void *arg){
+    uartPuts("bomb start\n");
+    return (void *)(uintptr_t)syRecurseForever(0);
+}
+
 void initSyntropyUserSpace(void){
-    syThreadCreate(&networkConnThread, networkConnStack, sizeof(networkConnStack), setupNetworkConn, 0);
+    if(syThreadCreate(&networkConnThread, networkConnStack, sizeof(networkConnStack), setupNetworkConn, 0) != 0){
+        buildFatalErrorAlert();
+        while(1){
+
+        }
+    }
     syThreadJoin(&networkConnThread);
-    syThreadCreate(&syntropyGUIThread, syntropyGUIStack, sizeof(syntropyGUIStack), syntropyGUI, 0);
+
+    if(syThreadCreate(&syntropyGUIThread, syntropyGUIStack, sizeof(syntropyGUIStack), syntropyGUI, 0) != 0){
+        buildFatalErrorAlert();
+        while(1){
+
+        }
+    }
+
+    /*
+    // If you wanna test the stack protection subsystem and shit... this WILL panic the kern tho. ¯\_(ツ)_/¯
+
+    if (syThreadCreate(&overflowThread, overflowStack, sizeof(overflowStack), syStackBomb, 0) != 0){
+        buildFatalErrorAlert();
+        while(1){
+
+        }
+    }
+
+    syThreadJoin(&overflowThread);  
+    */
     return;
 }
