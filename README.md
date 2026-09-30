@@ -1,6 +1,10 @@
 # SyntropyOS
 SyntropyOS is a bare-metal operating system for the ESP32 devices with ILI9341 TFT touchscreen displays. Syntropy features a graphical user interface, cooperative multitasking, UART, FrameBuffer, and many features soon to come.
 
+<p align="center">
+  <img src="https://forenzes.com/assets/img/board-syntropyos-trans.webp?v=1790677903" height="200">
+</p>
+
 ### Supported devices:
 Any ESP32 With 2.8 Inch ILI9341 TFT Touch Display Board or larger ILI9341 screens with the XPT2046 resistive touch controller. 
 
@@ -13,6 +17,12 @@ This was developed and tested on 2.8 Inch ESP32 TFT Touch Display Board, those c
 - Cooperative multitasking (threads via round-robin for now)
 - GUI
 - Touch Screen support with calibration app
+- Full SD Card support (SD, SDv2, SDHC)
+- Full FAT16 and FAT32 support with formatting and GPT / MBR scheme support.
+
+<p align="center">
+  <img src="https://forenzes.com/assets/img/syntropyos-board.webp?v=1790673711" height="400">
+</p>
 
 ### Mind the BARE METAL
 Syntropy is a standalone, bare-metal OS, built from scratch, which means it doesn't use any of Espressif's libraries or Stage 2, as such, none of the Espressif APIs you expect are present (no ESP-IDF framework). In other words, this does not run on top of FreeRTOS or Espressif's 2nd Stage Bootloader, so don't expect it to have those same components. 
