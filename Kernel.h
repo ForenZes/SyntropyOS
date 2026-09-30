@@ -14,6 +14,8 @@
 #define KERN_FAILURE       -1;
 #define KERN_SUCCESS        0;
 
+void hwForceReboot(void);
+
 // Memory utils
 void *memmove(void *dst, const void *src, size_t n);
 void *memcpy(void *dst, const void *src, size_t n);

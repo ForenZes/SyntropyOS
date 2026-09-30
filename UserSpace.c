@@ -14,6 +14,7 @@
 #include "GraphicsCache.h"
 #include "UART.h"
 #include "DiskManager.h"
+#include "SettingsApp.h"
 
 bool SetupDoneAllSteps = false;
 bool SetupDoneClock = false;
@@ -268,7 +269,7 @@ void *syntropyDesktopMonitor(void *arg){
         syClockSetupRun();
         SetupDoneClock = true;
     }
-    
+
     for(;;){
         switchboardDraw((currentNetwork && currentNetwork[0]) ? currentNetwork : "No Service", isReachability);
 
@@ -288,7 +289,12 @@ void *syntropyDesktopMonitor(void *arg){
                 if(idx >= 0){
                     syTouchscreenWaitRelease();
                     switch(idx){
-                        case 4: diskManagerInit(); break;
+                        case 3: 
+                            initSettingsApp(); 
+                            break;
+                        case 4: 
+                            diskManagerInit(); 
+                            break;
                         default: break;
                     }
                     break;

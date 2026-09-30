@@ -20,4 +20,5 @@ extern bool SetupDoneAllSteps;
 //Time keeping stuff
 static void formatHHMM(uint32_t secOfDay, char *out);
 void syClockSetupUI(void);
+void syClockSetupRun(void);
 #endif
