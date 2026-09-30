@@ -13,6 +13,7 @@
 #include "Console.h"
 #include "GraphicsCache.h"
 #include "UART.h"
+#include "DiskManager.h"
 
 bool SetupDoneAllSteps = false;
 
@@ -29,6 +30,7 @@ bool SetupDoneAllSteps = false;
 #define SB_INK    RGB(255, 255, 255)
 #define SB_ACCENT RGB(96, 176, 255)
 
+void alertSetMessage(const char *message);
 char * currentNetwork = "-";
 bool isReachability = false;
 
@@ -37,8 +39,8 @@ static void drawIcon(int x, int y, const SyIcon *ic, uint16_t color, int scale){
 }
 
 static void switchboardSetBars(uint16_t color){
-    FrameBufferFillRect(0, 0, SB_W, SB_STATUS_H, color);
-    FrameBufferFillRect(0, SB_DOCK_Y, SB_W, SB_DOCK_H, color);
+    FrameBufferBox(0, 0, SB_W, SB_STATUS_H, color, 0, 0, 0);
+    FrameBufferBox(0, SB_DOCK_Y, SB_W, SB_DOCK_H, color, 0, 0, 0);
     FrameBufferLine(0, SB_DOCK_Y, SB_W - 1, SB_DOCK_Y, SB_ACCENT);
 }
 
@@ -64,27 +66,33 @@ static void switchboardSetMisc(int wifiConnected){
 
 void buildFatalErrorAlert(void){
     FrameBufferClear(RGB(2, 126, 105));
-    FrameBufferFillRect(16, 52, 289, 137, RGB(226, 64, 64));
-    FrameBufferRect(15, 51, 290, 138, RGB(255, 255, 255));
+    FrameBufferBox(15, 51, 290, 138, RGB(226, 64, 64), 10, 1, RGB(255, 255, 255));
     FrameBufferText(64, 74, "Fatal Error!", RGB(255, 255, 255), 2);
     FrameBufferText(32, 105, "There is no space to spawn a new", RGB(255, 255, 255), 1);
     FrameBufferText(64, 124, "thread. Reboot Syntropy?", RGB(255, 255, 255), 1);
-    FrameBufferFillRect(107, 157, 106, 22, RGB(255, 117, 117));
-    FrameBufferRect(106, 156, 108, 24, RGB(255, 255, 255));
+    FrameBufferBox(106, 156, 108, 24, RGB(255, 117, 117), 6, 1, RGB(255, 255, 255));
     FrameBufferText(114, 160, "Reboot", RGB(255, 255, 255), 2);
     FrameBufferFlush();
 }
 
+/*
 void buildAlertNotification(){
     FrameBufferClear(RGB(2, 126, 105));
-    FrameBufferFillRect(16, 52, 289, 137, RGB(229, 143, 206));
-    FrameBufferRect(15, 51, 290, 138, RGB(255, 255, 255));
+    FrameBufferBox(15, 51, 290, 138, RGB(229, 143, 206), 13, 1, RGB(255, 255, 255));
     FrameBufferText(96, 68, "Welcome!", RGB(255, 255, 255), 2);
     FrameBufferText(32, 102, "This is the text for this alert!", RGB(255, 255, 255), 1);
     FrameBufferText(60, 119, "Feel free to ignore this!", RGB(255, 255, 255), 1);
-    FrameBufferFillRect(107, 151, 106, 22, RGB(228, 98, 168));
-    FrameBufferRect(106, 150, 108, 24, RGB(255, 255, 255));
+    FrameBufferBox(106, 150, 108, 24, RGB(228, 98, 168), 5, 1, RGB(255, 255, 255));
     FrameBufferText(144, 155, "OK", RGB(255, 255, 255), 2);
+    FrameBufferFlush();
+}
+*/
+
+void enablingWifiAlert(void){
+    FrameBufferClear(RGB(69, 69, 69));
+    FrameBufferBox(15, 77, 290, 66, RGB(64, 118, 226), 0, 1, RGB(255, 255, 255));
+    alertSetMessage("Enabling WiFi...");
+    FrameBufferIcon(144, 80, cellTowerIcon, 16, 16, RGB(255, 255, 255), 2);
     FrameBufferFlush();
 }
 
@@ -95,8 +103,14 @@ void switchboardDraw(const char *username, int wifiConnected){
     switchboardSetWallpaper();
     switchboardSetMisc(wifiConnected);
     FrameBufferFlush();
-    //buildAlertNotification();
-    FrameBufferFlush();
+
+    if (initCoreStorageDevices() == 0) {
+        diskManagerInit();
+    } else if (initCoreStorageDevices() == -3){
+        diskManagerInit(); // the block device did initialize, but the partition is foreign or damaged. We ask if user wants to format.
+    } else {
+        diskManagerInit(); 
+    }
 }
 
 void touchScreenCalibrationApp(){
@@ -117,15 +131,6 @@ void alertSetMessage(const char *message){
     int textX = boxX + (boxWidth - textWidth) / 2;
 
     FrameBufferText(textX, lineY, message, RGB(255, 255, 255), scale);
-    FrameBufferFlush();
-}
-
-void enablingWifiAlert(void){
-    FrameBufferClear(RGB(69, 69, 69));
-    FrameBufferFillRect(16, 77, 289, 66, RGB(64, 118, 226));
-    FrameBufferRect(15, 77, 290, 66, RGB(255, 255, 255));
-    alertSetMessage("Enabling WiFi...");
-    FrameBufferIcon(144, 80, cellTowerIcon, 16, 16, RGB(255, 255, 255), 2);
     FrameBufferFlush();
 }
 
@@ -152,27 +157,9 @@ static void *syntropyGUI(void *arg){
 }
 
 static uint32_t networkConnStack[256];   // 1 KB each, static so they persist
-static uint32_t syntropyGUIStack[256];
+static uint32_t syntropyGUIStack[512];
 static syThread_t networkConnThread;
 static syThread_t syntropyGUIThread;
-
-
-static uint32_t overflowStack[256];
-static syThread_t overflowThread;
-
-static int syRecurseForever(int depth){
-    volatile int marker[8];
-    marker[0] = depth;
-    if(depth > 1000000){
-        return marker[0];
-    }
-    return syRecurseForever(depth + 1) + marker[0];
-}
-
-static void *syStackBomb(void *arg){
-    uartPuts("bomb start\n");
-    return (void *)(uintptr_t)syRecurseForever(0);
-}
 
 void initSyntropyUserSpace(void){
     if(syThreadCreate(&networkConnThread, networkConnStack, sizeof(networkConnStack), setupNetworkConn, 0) != 0){
@@ -189,18 +176,5 @@ void initSyntropyUserSpace(void){
 
         }
     }
-
-    /*
-    // If you wanna test the stack protection subsystem and shit... this WILL panic the kern tho. ¯\_(ツ)_/¯
-
-    if (syThreadCreate(&overflowThread, overflowStack, sizeof(overflowStack), syStackBomb, 0) != 0){
-        buildFatalErrorAlert();
-        while(1){
-
-        }
-    }
-
-    syThreadJoin(&overflowThread);  
-    */
     return;
 }

@@ -283,6 +283,70 @@ void FrameBufferFlush(void){
     lcdWritePixels(SyntropyFrameBuffer, FB_WIDTH * FB_HEIGHT);
 }
 
+static uint32_t fbIsqrt(uint32_t v){
+    uint32_t r = 0;
+    while((r + 1) * (r + 1) <= v){
+        r++;
+    }
+    return r;
+}
+
+static void fbFillRoundRect(int x, int y, int w, int h, int r, uint16_t color){
+    if(w <= 0 || h <= 0){
+        return;
+    }
+    if(r < 0){
+        r = 0;
+    }
+    int m = (w < h ? w : h) / 2;
+    if(r > m){
+        r = m;
+    }
+
+    for(int row = 0; row < h; row++){
+        int inset = 0;
+        if(row < r){
+            int dy = r - 1 - row;
+            inset = r - (int)fbIsqrt((uint32_t)(r * r - dy * dy));
+        } else if(row >= h - r){
+            int dy = row - (h - r);
+            inset = r - (int)fbIsqrt((uint32_t)(r * r - dy * dy));
+        }
+        FrameBufferHLine(x + inset, y + row, w - 2 * inset, color);
+    }
+}
+
+void FrameBufferBox(int x, int y, int w, int h, uint16_t fillColor, int radius, int borderWidth, uint16_t borderColor){
+    if(borderWidth < 0){
+        borderWidth = 0;
+    }
+    if(borderWidth > 0){
+        fbFillRoundRect(x, y, w, h, radius, borderColor);
+        int ir = radius - borderWidth;
+        if(ir < 0){
+            ir = 0;
+        }
+        fbFillRoundRect(x + borderWidth, y + borderWidth, w - 2 * borderWidth, h - 2 * borderWidth, ir, fillColor);
+    } else {
+        fbFillRoundRect(x, y, w, h, radius, fillColor);
+    }
+}
+
+void FrameBufferDisc(int cx, int cy, int r, uint16_t fillColor, int borderWidth, uint16_t borderColor){
+    if(borderWidth < 0){
+        borderWidth = 0;
+    }
+    if(borderWidth > 0){
+        FrameBufferFillCircle(cx, cy, r, borderColor);
+        int ir = r - borderWidth;
+        if(ir > 0){
+            FrameBufferFillCircle(cx, cy, ir, fillColor);
+        }
+    } else {
+        FrameBufferFillCircle(cx, cy, r, fillColor);
+    }
+}
+
 void FrameBufferFlushRect(int x, int y, int w, int h){
     if(x < 0){
         w += x;

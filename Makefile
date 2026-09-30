@@ -13,7 +13,7 @@ CFLAGS = -std=c11 -Os -ffreestanding -nostdlib -mlongcalls -mabi=call0 $(addpref
  
 .PHONY: all flash clean
  
-all: syntropyOS.bin
+all: syntropy.bin
  
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -21,15 +21,15 @@ all: syntropyOS.bin
 %.o: %.S
 	$(CC) -mabi=call0 -mlongcalls -c $< -o $@
  
-syntropyOS.elf: $(OBJS) esp32.ld
-	$(CC) -nostdlib -mabi=call0 -T esp32.ld $(OBJS) -o syntropyOS.elf -lgcc
+app.elf: $(OBJS) esp32.ld
+	$(CC) -nostdlib -mabi=call0 -T esp32.ld $(OBJS) -o app.elf -lgcc
  
-syntropyOS.bin: syntropyOS.elf
-	$(ESPTOOL) --chip esp32 elf2image --flash_mode dio --flash_freq 40m --flash_size 4MB -o syntropyOS.bin syntropyOS.elf
+syntropy.bin: app.elf
+	$(ESPTOOL) --chip esp32 elf2image --flash_mode dio --flash_freq 40m --flash_size 4MB -o syntropy.bin app.elf
  
-flash: syntropyOS.bin
-	$(ESPTOOL) --chip esp32 --port $(PORT) write_flash 0x1000 syntropyOS.bin
+flash: syntropy.bin
+	$(ESPTOOL) --chip esp32 --port $(PORT) write_flash 0x1000 syntropy.bin
  
 clean:
 	find . -name '*.o' -delete
-	rm -f syntropyOS.elf syntropyOS.bin
+	rm -f app.elf syntropy.bin

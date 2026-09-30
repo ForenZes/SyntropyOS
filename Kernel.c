@@ -14,6 +14,8 @@
 #include "TouchScreen.h"
 #include "UART.h"
 #include "DeviceTree.h"
+#include "CoreStorage.h"
+#include "DiskManager.h"
 
 #define kSyntropyKernelVersion "SyntropyOS Kernel v0.01 ALPHA ~ DEVELOPMENT / GeoSn0w, Sep 28, 2026"
 
@@ -574,6 +576,33 @@ static void hardwareInit(void){
     initTouchScreen();
 }
 
+int initCoreStorageDevices(){
+    if(coreStorageInit()){
+        uartPuts("CoreStorage: SD Initialization completed. SD Card Type = ");
+        uartPrintDec(sdCardGetType());
+        uartPuts("\n");
+        uint8_t buf[512];
+
+        if(sdReadBlock(0, buf)){
+            uartPuts("CoreStorage: Card Signature: ");
+            uartPrintHex(buf[510]);
+            uartPrintHex(buf[511]);
+            uartPuts("\n");
+        } else {
+            uartPuts("CoreStorage: SD card initialization failed!\n");
+            return -1;
+        }
+
+        if(fatMount()){
+            uartPuts("CoreStorage: FAT Partition mounted!\n");
+            return 0;
+        } else {
+            uartPuts("CoreStorage: FAT Partition mount failed!\n");
+            return -3;
+        }
+    }
+    return -2;
+}
 
 void SyntropyKernelInit(void){
     disableWatchdogs();

@@ -156,6 +156,8 @@ void FrameBufferFillRect(int x, int y, int w, int h, uint16_t color);
 void FrameBufferRect(int x, int y, int w, int h, uint16_t color);
 void FrameBufferFillCircle(int cx, int cy, int r, uint16_t color);
 void FrameBufferCircle(int cx, int cy, int r, uint16_t color);
+void FrameBufferBox(int x, int y, int w, int h, uint16_t fillColor, int radius, int borderWidth, uint16_t borderColor);
+void FrameBufferDisc(int cx, int cy, int r, uint16_t fillColor, int borderWidth, uint16_t borderColor);
 void FrameBufferFlush(void);
 void FrameBufferFlushRect(int x, int y, int w, int h);
 void FrameBufferIcon(int x, int y, const uint32_t *rows, int w, int h, uint16_t color, int scale);

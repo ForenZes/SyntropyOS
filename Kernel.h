@@ -66,5 +66,5 @@ static void syDisableStackWatchpoint(void);
 static void syVectorInit(void);
 static void syDecToStr(int value, char *out);
 static void syHexToStr(uint32_t value, char *out);
-
+int initCoreStorageDevices(void);
 #endif
