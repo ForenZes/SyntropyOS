@@ -39,7 +39,6 @@ typedef int kSemaphore_t; // Kernel semaphore cookie
 #define ESP32C3_RESET_REG       (ESP32C3_RTC_CNTL_BASE + 0x00u)
 #define ESP32C3_RESET_BIT       31
 
-
 #define DR_REG_GPIO        0x3FF44000
 #define DR_REG_IOMUX       0x3FF49000
 #define DR_REG_SPI2        0x3FF64000
@@ -89,6 +88,8 @@ uint32_t syPanicStack[512] __attribute__((section(".stacks"), aligned(16)));
 void syKernelPanicInit(void);
 
 uint32_t syFaultRegs[20];
+uint32_t syFaultReason = 0;
+void syWindowExceptionPanic(uint32_t marker);
 
 void hwForceReboot(void){
 
@@ -102,8 +103,8 @@ void hwForceReboot(void){
         MMIO32(ESP32C3_RESET_REG) |= (1u << ESP32C3_RESET_BIT); // ESP32 C3
     }
 
-    while (0) {
-        // bail
+    while (1) {
+
     }
 }
 
@@ -195,6 +196,7 @@ void syThreadJoin(syThread_t *thread){
 }
 
 void syThreadingInit(syThread_t *kernelTask){
+    uartPuts("Initializing Thread Scheduling...\n");
     // Kern becomes thread 0 so the very first switch has a valid place to save its stack pointer
     kernelTask->threadId = 0;
     kernelTask->threadEntry = 0;
@@ -247,44 +249,20 @@ static void syVectorInit(void){
     uint32_t check;
     __asm__ volatile("rsr %0, 231" : "=r"(check));
 
-    uartPuts("VECBASE want=");
-    uartPrintHex(base);
-    uartPuts(" got=");
-    uartPrintHex(check);
-    uartPuts("\n");
-
     uint32_t scratch;
     __asm__ volatile("rsil %0, 0" : "=r"(scratch));
 }
 
-static void syDecToStr(int value, char *out){
-    char reversedDigits[12];
-    int digitCount = 0;
-    unsigned magnitude = (unsigned)value;
+void syPrintMACAddress(void){
+    uint8_t macAddy[6];
+    syLLReadMACAddress(macAddy);
 
-    if(magnitude == 0){
-        reversedDigits[digitCount++] = '0';
+    uartPuts("Device MAC: ");
+    for(int i = 0; i < 6; i++){
+        uartPrintByteHex(macAddy[i]);
+        if(i < 5){ uartPutc(':'); }
     }
-    while(magnitude){
-        reversedDigits[digitCount++] = '0' + (magnitude % 10);
-        magnitude /= 10;
-    }
-
-    int outIndex = 0;
-    while(digitCount){
-        out[outIndex++] = reversedDigits[--digitCount];
-    }
-    out[outIndex] = 0;
-}
-
-static void syHexToStr(uint32_t value, char *out){
-    static const char hexDigits[] = "0123456789ABCDEF";
-    out[0] = '0';
-    out[1] = 'x';
-    for(int i = 0; i < 8; i++){
-        out[2 + i] = hexDigits[(value >> ((7 - i) * 4)) & 0xF];
-    }
-    out[10] = 0;
+    uartPuts("\n");
 }
 
 void syKernelPanicInit(void){
@@ -293,7 +271,11 @@ void syKernelPanicInit(void){
     uint32_t sp = syFaultRegs[1];
     int tid = currentRunningThread ? currentRunningThread->threadId : -1;
 
-    uartPuts("\n!!! syntropyOS Kernel PANIC: STACK OVERFLOW !!!\n");
+    const char *reason = (syFaultReason == 3) ? "CPU EXCEPTION" : "STACK OVERFLOW";
+
+    uartPuts("\n!!! syntropyOS Kernel PANIC: ");
+    uartPuts(reason);
+    uartPuts(" !!!\n");
     uartPuts("Thread: ");
     uartPrintDec(tid);
     uartPuts("\n");
@@ -311,11 +293,14 @@ void syKernelPanicInit(void){
     uartPuts("SAR = "); uartPrintHex(syFaultRegs[18]); uartPuts("\n");
     uartPuts("DBG = "); uartPrintHex(syFaultRegs[19]); uartPuts("\n");
     uartPuts("\nPlease report this panic on https://forenzes.com/syntropyOS/support\n");
+    
+
     uartPuts("-- The device will self reboot in 2 minutes. --\n");
 
     syConsoleInit(COLOR_BLACK, COLOR_WHITE, 1);
     syConsolePutString("!!! syntropyOS Kernel PANIC !!!\n");
-    syConsolePutString("Stack Overflow\n\n");
+    syConsolePutString(reason);
+    syConsolePutString("\n\n");
 
     syConsolePutString("Thread: ");
     syDecToStr(tid, buf);
@@ -347,15 +332,61 @@ void syKernelPanicInit(void){
 }
 
 void syFaultPanic(uint32_t exceptionCause, uint32_t faultingProgramCounter){
-    uartPuts("CPU FAULT cause=");
+    uartPuts("CPU FAULT cause =");
     uartPrintHex(exceptionCause);
-    uartPuts(" pc=");
+    uartPuts(" PC =");
     uartPrintHex(faultingProgramCounter);
     uartPuts("\n");
     while(1){
     }
 }
+
+void syWindowExceptionPanic(uint32_t marker){
+    uartPuts("\n!!! syntropyOS Kernel PANIC: WINDOW EXCEPTION !!!\n");
+    uartPuts("ABI MISMATCH? -_-\n");
+    uartPuts("VECTOR = ");
+    uartPrintHex(marker);
+    uartPuts("\n");
+
+    syConsoleInit(COLOR_BLACK, COLOR_WHITE, 2);
+    syConsolePutString("!!! syntropyOS Kernel PANIC !!!\n\n");
+    syConsolePutString("WINDOW EXCEPTION\n");
+    syConsolePutString("ABI MISMATCH? -_-\n");
+
+    while(1){
+    }
+}
 // End of threading sub system
+
+static void syDecToStr(int value, char *out){
+    char reversedDigits[12];
+    int digitCount = 0;
+    unsigned magnitude = (unsigned)value;
+
+    if(magnitude == 0){
+        reversedDigits[digitCount++] = '0';
+    }
+    while(magnitude){
+        reversedDigits[digitCount++] = '0' + (magnitude % 10);
+        magnitude /= 10;
+    }
+
+    int outIndex = 0;
+    while(digitCount){
+        out[outIndex++] = reversedDigits[--digitCount];
+    }
+    out[outIndex] = 0;
+}
+
+static void syHexToStr(uint32_t value, char *out){
+    static const char hexDigits[] = "0123456789ABCDEF";
+    out[0] = '0';
+    out[1] = 'x';
+    for(int i = 0; i < 8; i++){
+        out[2 + i] = hexDigits[(value >> ((7 - i) * 4)) & 0xF];
+    }
+    out[10] = 0;
+}
 
 void *memcpy(void *dst, const void *src, size_t n){
     uint8_t *d = dst;
@@ -457,18 +488,18 @@ void syRAMProbe(void){
     if(inRun){ uartPrintHex(runStart); uartPuts("-"); uartPrintHex(0x40000000u); uartPuts("\n"); }
 }
 
-static uint32_t ccount(void){
-    uint32_t c;
-    __asm__ volatile("rsr %0, ccount" : "=r"(c));
-    return c;
+static uint32_t cycleCountReader(void){
+    uint32_t v;
+    __asm__ volatile("rsr %0, ccount" : "=r"(v));
+    return v;
 }
 
 void syWaitMilliseconds(uint32_t ms){
     while(ms > 0){
         uint32_t chunk = (ms > 1000) ? 1000 : ms;
-        uint32_t start = ccount();
+        uint32_t start = cycleCountReader();
         uint32_t wait = chunk * (CPU_HZ / 1000);
-        while((ccount() - start) < wait){
+        while((cycleCountReader() - start) < wait){
         }
         ms -= chunk;
     }
@@ -503,6 +534,7 @@ static void disableWatchdogs(void){
 }
 
 static void initSPIInterfaces(void){
+    uartPuts("Initializing SPI driver...\n");
     DPORT_PERIP_CLK_EN |= (1u << 6);
     DPORT_PERIP_RST_EN &= ~(1u << 6);
 
@@ -588,7 +620,31 @@ void lcdWritePixels(const uint16_t *pixels, uint32_t count){
     ioSetHigh(PIN_CS);
 }
 
+static uint32_t remCycles    = 0;
+static uint32_t totalSeconds = 0;
+static uint32_t lastCcount   = 0;
+static uint32_t clockBaseSeconds = 12u*3600u + 31u*60u;
+
+uint32_t syGetRealTimeSystemClock(void){
+    uint32_t now = cycleCountReader();
+    remCycles += (uint32_t)(now - lastCcount);
+    lastCcount = now;
+    while(remCycles >= CPU_HZ){
+        remCycles -= CPU_HZ;
+        totalSeconds++;
+    }
+    return clockBaseSeconds + totalSeconds;
+}
+
+void syClockSet(uint32_t secondsOfDay){
+    clockBaseSeconds = secondsOfDay % 86400u;
+    totalSeconds = 0;
+    remCycles = 0;
+    lastCcount = cycleCountReader();
+}
+
 static void initializeLiquidCristalDisplay(void){
+    uartPuts("Initializing ILI9341 Display driver...\n");
     writeLCDCMD(0x01);
     delay(2000000);
     writeLCDCMD(0x11);
@@ -604,9 +660,11 @@ static void initializeLiquidCristalDisplay(void){
 }
 
 static void hardwareInit(void){
+    uartPuts("Initializing hardware subsystems...\n");
     IOMUX_GPIO2 = (2u << 12);
     IOMUX_GPIO15 = (2u << 12);
     IOMUX_GPIO21 = (2u << 12);
+    uartPuts("Initializing GPIO...\n");
     gpioMakeOutput(PIN_CS);
     gpioMakeOutput(PIN_DC);
     gpioMakeOutput(PIN_BL);
@@ -617,6 +675,7 @@ static void hardwareInit(void){
     initSPIInterfaces();
     initializeLiquidCristalDisplay();
     initTouchScreen();
+    syPrintMACAddress();
 }
 
 coreStorage_t initCoreStorageDevices(){
@@ -628,8 +687,8 @@ coreStorage_t initCoreStorageDevices(){
 
         if(sdReadBlock(0, buf)){
             uartPuts("CoreStorage: Card Signature: ");
-            uartPrintHex(buf[510]);
-            uartPrintHex(buf[511]);
+            uartPrintByteHex(buf[510]);
+            uartPrintByteHex(buf[511]);
             uartPuts("\n");
         } else {
             uartPuts("CoreStorage: SD card initialization failed!\n");
@@ -648,8 +707,16 @@ coreStorage_t initCoreStorageDevices(){
 }
 
 kernReturn_t bootSyntropyOS(){
-    hardwareInit();
     uartInit();
+    uartPuts("\n\n");
+    uartPuts("|---------------------------------------|\n");
+    uartPuts("|                                  --   |\n");
+    uartPuts("|             syntropyOS                |\n");
+    uartPuts("| --                                    |\n");
+    uartPuts("|---------------------------------------|\n\n");
+    uartPuts(kSyntropyKernelVersion);
+    uartPuts("\n");
+    hardwareInit();
 
     FrameBufferClear(RGB(0, 0, 0));
     FrameBufferText(40, 108, "syntropyOS", RGB(255, 255, 255), 3);
@@ -666,7 +733,6 @@ kernReturn_t bootSyntropyOS(){
     if (!SetupDoneAllSteps) {
         touchScreenCalibrationApp();
     }
-
     return 0;
 }
 

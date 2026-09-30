@@ -11,6 +11,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define KERN_FAILURE       -1;
+#define KERN_SUCCESS        0;
+
 // Memory utils
 void *memmove(void *dst, const void *src, size_t n);
 void *memcpy(void *dst, const void *src, size_t n);
@@ -60,13 +63,19 @@ void syThreadJoin(syThread_t *thread);
 static void syThreadTrampoline(void);
 void syWaitMilliseconds(uint32_t ms);
 static void syStackPaint(syThread_t *thread);
+
 uint32_t syStackHighWater(syThread_t *thread);
 void syWatchpointPanic(uint32_t faultingProgramCounter);
 void syFaultPanic(uint32_t exceptionCause, uint32_t faultingProgramCounter);
+void syWindowExceptionPanic(uint32_t marker);
+
 static void syArmStackWatchpoint(uint32_t *canaryAddress);
 static void syDisableStackWatchpoint(void);
 static void syVectorInit(void);
 static void syDecToStr(int value, char *out);
 static void syHexToStr(uint32_t value, char *out);
 int initCoreStorageDevices(void);
+
+uint32_t syGetRealTimeSystemClock(void);
+void syClockSet(uint32_t secondsOfDay);
 #endif

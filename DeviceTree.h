@@ -11,5 +11,5 @@
 #include "Kernel.h"
 
 extern int deviceType;
-
+void syLLReadMACAddress(uint8_t *macAddy);
 #endif

@@ -82,6 +82,7 @@ static void tdelay(void){
 }
 
 void initTouchScreen(void){
+    uartPuts("Initializing TouchScreen driver...\n");
     RTC_IO_XTAL_32K_PAD &= ~((1u << 17) | (1u << 18) | (1u << 19) | (1u << 20) | (1u << 24) | (1u << 29));
 
     IOMUX_GPIO25 = (2u << 12);

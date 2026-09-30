@@ -205,9 +205,13 @@ int coreStorageInit(void){
 
     SPI3_CLOCK = SPI_CLOCK_FAST;
 
-    if(usesBlockAddressing){ detectedType = SD_TYPE_SDHC; }
-    else if(isVersion2){ detectedType = SD_TYPE_SD2; }
-    else { detectedType = SD_TYPE_SD1; }
+    if(usesBlockAddressing){ 
+        detectedType = SD_TYPE_SDHC; 
+    } else if(isVersion2){ 
+        detectedType = SD_TYPE_SD2; 
+    } else { 
+        detectedType = SD_TYPE_SD1; 
+    }
     return 1;
 }
 
@@ -284,10 +288,7 @@ static uint16_t readLe16(const uint8_t *b, int offset){
 }
  
 static uint32_t readLe32(const uint8_t *b, int offset){
-    return (uint32_t)b[offset]
-         | ((uint32_t)b[offset + 1] << 8)
-         | ((uint32_t)b[offset + 2] << 16)
-         | ((uint32_t)b[offset + 3] << 24);
+    return (uint32_t)b[offset] | ((uint32_t)b[offset + 1] << 8) | ((uint32_t)b[offset + 2] << 16) | ((uint32_t)b[offset + 3] << 24);
 }
  
 static void writeLe16(uint8_t *b, int offset, uint16_t v){
@@ -392,25 +393,25 @@ static void fillEntry(const uint8_t *raw, fatEntry *out){
 }
  
 static int isFatPartitionType(uint8_t t){
-    return t == 0x01 || t == 0x04 || t == 0x06
-        || t == 0x0B || t == 0x0C || t == 0x0E;
+    return t == 0x01 || t == 0x04 || t == 0x06 || t == 0x0B || t == 0x0C || t == 0x0E;
 }
  
 static uint32_t gptFirstPartitionLba(void){
     if(!sdReadBlock(1, sectorBuffer)){
         return 0;
     }
-    if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F'
-    || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
+    if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F' || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
         return 0;
     }
  
     uint32_t entryLba = readLe32(sectorBuffer, 72);
     uint32_t entryCount = readLe32(sectorBuffer, 80);
     uint32_t entrySize = readLe32(sectorBuffer, 84);
+
     if(entrySize == 0 || entrySize > 512){
         return 0;
     }
+
     uint32_t perSector = 512 / entrySize;
     if(perSector == 0){
         return 0;
@@ -422,14 +423,17 @@ static uint32_t gptFirstPartitionLba(void){
                 return 0;
             }
         }
+
         uint32_t off = (idx % perSector) * entrySize;
         int nonzero = 0;
+
         for(int k = 0; k < 16; k++){
             if(sectorBuffer[off + k]){
                 nonzero = 1;
                 break;
             }
         }
+
         if(nonzero){
             return readLe32(sectorBuffer, off + 32);
         }
@@ -441,13 +445,16 @@ static int looksLikeBpb(void){
     if(readLe16(sectorBuffer, 11) != 512){
         return 0;
     }
+
     uint8_t spc = sectorBuffer[13];
     if(spc == 0 || (spc & (spc - 1))){
         return 0;
     }
+
     if(readLe16(sectorBuffer, 14) == 0){
         return 0;
     }
+
     if(sectorBuffer[16] == 0){
         return 0;
     }
@@ -772,20 +779,25 @@ static int resolvePartition(uint32_t *startOut, uint32_t *countOut){
         if(!sdReadBlock(1, sectorBuffer)){
             return 0;
         }
-        if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F'
-        || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
+
+        if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F' || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
             return 0;
         }
+
         uint32_t entryLba = readLe32(sectorBuffer, 72);
         uint32_t entryCount = readLe32(sectorBuffer, 80);
         uint32_t entrySize = readLe32(sectorBuffer, 84);
+
         if(entrySize == 0 || entrySize > 512){
             return 0;
         }
+
         uint32_t perSector = 512 / entrySize;
+
         if(perSector == 0){
             return 0;
         }
+
         for(uint32_t idx = 0; idx < entryCount; idx++){
             if(idx % perSector == 0){
                 if(!sdReadBlock(entryLba + idx / perSector, sectorBuffer)){
@@ -794,12 +806,14 @@ static int resolvePartition(uint32_t *startOut, uint32_t *countOut){
             }
             uint32_t off = (idx % perSector) * entrySize;
             int nonzero = 0;
+
             for(int k = 0; k < 16; k++){
                 if(sectorBuffer[off + k]){
                     nonzero = 1;
                     break;
                 }
             }
+
             if(nonzero){
                 uint32_t first = readLe32(sectorBuffer, off + 32);
                 uint32_t last = readLe32(sectorBuffer, off + 40);
@@ -829,6 +843,7 @@ static void writeLabelEntry(uint8_t *b, const char *label){
     for(int i = 0; i < 11; i++){
         b[i] = ' ';
     }
+    
     for(int i = 0; i < 11 && label[i]; i++){
         b[i] = (uint8_t)upcase(label[i]);
     }

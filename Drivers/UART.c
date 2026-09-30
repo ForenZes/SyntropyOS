@@ -43,6 +43,12 @@ void uartPrintHex(uint32_t value){
     }
 }
 
+void uartPrintByteHex(uint8_t byte){
+    const char *hexDigits = "0123456789ABCDEF";
+    uartPutc(hexDigits[(byte >> 4) & 0xF]);
+    uartPutc(hexDigits[byte & 0xF]);
+}
+
 void uartPrintDec(int value){
     char rev[12];
     int n = 0;

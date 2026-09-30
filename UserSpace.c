@@ -3,7 +3,7 @@
 // (C) ForenZes Labs, 2026
 // Developed by GeoSn0w (@FCE365)
 // https://forenzes.com
-// 
+//
 
 #include "UserSpace.h"
 #include "Framebuffer.h"
@@ -16,6 +16,7 @@
 #include "DiskManager.h"
 
 bool SetupDoneAllSteps = false;
+bool SetupDoneClock = false;
 
 #define SB_W 320
 #define SB_H 240
@@ -33,20 +34,111 @@ bool SetupDoneAllSteps = false;
 #define DOCK_PITCH   40
 #define DOCK_COUNT   8
 
+static int inRect(int x, int y, int rx, int ry, int rw, int rh){
+    return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+}
+
+static void formatHHMM(uint32_t secOfDay, char *out){
+    int hh = (secOfDay / 3600u) % 24;
+    int mm = (secOfDay % 3600u) / 60u;
+    out[0] = '0' + hh / 10; out[1] = '0' + hh % 10;
+    out[2] = ':';
+    out[3] = '0' + mm / 10; out[4] = '0' + mm % 10;
+    out[5] = 0;
+}
+
+static void drawDesktopClock(void){
+    char buf[6];
+    formatHHMM(syGetRealTimeSystemClock() % 86400u, buf);
+    FrameBufferFillRect(272, 6, 40, 8, SB_BAR);
+    FrameBufferText(272, 6, buf, SB_INK, 1);
+}
+
+void syClockSetupUI(void){
+    FrameBufferClear(RGB(69, 69, 69));
+    FrameBufferFillRect(0, 0, 320, 31, RGB(117, 64, 125));
+    FrameBufferText(40, 7, "Please set time", RGB(255, 255, 255), 2);
+    FrameBufferFillRect(0, 206, 320, 34, RGB(117, 64, 125));
+    FrameBufferFillRect(13, 61, 42, 118, RGB(135, 135, 135));
+    FrameBufferIcon(18, 95, bigArowLeft, 16, 16, RGB(255, 255, 255), 3);
+    FrameBufferFillRect(59, 61, 202, 118, RGB(203, 204, 205));
+    FrameBufferFillRect(265, 61, 42, 118, RGB(135, 135, 135));
+    FrameBufferIcon(255, 95, bigArowRight, 16, 16, RGB(255, 255, 255), 3);
+    FrameBufferFillRect(110, 206, 100, 34, RGB(77, 40, 82));
+    FrameBufferText(136, 215, "SET", RGB(255, 255, 255), 2);
+    FrameBufferFlush();
+}
+
+static void drawTimeSetValue(int hh, int mm, int field){
+    char hhStr[3];
+    char mmStr[3];
+    hhStr[0] = '0' + hh / 10; hhStr[1] = '0' + hh % 10; hhStr[2] = 0;
+    mmStr[0] = '0' + mm / 10; mmStr[1] = '0' + mm % 10; mmStr[2] = 0;
+
+    uint16_t normal = RGB(136, 91, 143);
+    uint16_t active = RGB(77, 40, 82);
+
+    FrameBufferFillRect(59, 61, 202, 118, RGB(203, 204, 205));
+    FrameBufferText(63,  100, hhStr, field == 0 ? active : normal, 5);
+    FrameBufferText(143, 100, ":",   normal, 5);
+    FrameBufferText(183, 100, mmStr, field == 1 ? active : normal, 5);
+}
+
+void syClockSetupRun(void){
+    uint32_t nowSec = syGetRealTimeSystemClock() % 86400u;
+    int hh = (int)((nowSec / 3600u) % 24u);
+    int mm = (int)((nowSec % 3600u) / 60u);
+    int field = 0;
+
+    syClockSetupUI();
+    drawTimeSetValue(hh, mm, field);
+    FrameBufferFlush();
+
+    for(;;){
+        int x, y;
+        if(touchScreenGet(&x, &y)){
+            if(inRect(x, y, 13, 61, 42, 118)){
+                syTouchscreenWaitRelease();
+                if(field == 0){ hh = (hh + 23) % 24; } else { mm = (mm + 59) % 60; }
+                drawTimeSetValue(hh, mm, field);
+                FrameBufferFlush();
+            } else if(inRect(x, y, 265, 61, 42, 118)){
+                syTouchscreenWaitRelease();
+                if(field == 0){ hh = (hh + 1) % 24; } else { mm = (mm + 1) % 60; }
+                drawTimeSetValue(hh, mm, field);
+                FrameBufferFlush();
+            } else if(inRect(x, y, 110, 206, 100, 34)){
+                syTouchscreenWaitRelease();
+                if(field == 0){
+                    field = 1;
+                    drawTimeSetValue(hh, mm, field);
+                    FrameBufferFlush();
+                } else {
+                    syClockSet((uint32_t)hh * 3600u + (uint32_t)mm * 60u);
+                    return;
+                }
+            } else {
+                syTouchscreenWaitRelease();
+            }
+        }
+        syThreadYield();
+    }
+}
+
 static int dockHit(int tx, int ty){
-    if(ty < SB_DOCK_Y || ty >= SB_H){ 
-        return -1; 
+    if(ty < SB_DOCK_Y || ty >= SB_H){
+        return -1;
     }
 
     int rel = tx - DOCK_START_X;
 
-    if(rel < 0){ 
-        return -1; 
+    if(rel < 0){
+        return -1;
     }
-    int idx = rel / DOCK_PITCH;    
+    int idx = rel / DOCK_PITCH;
 
-    if(idx >= DOCK_COUNT){ 
-        return -1; 
+    if(idx >= DOCK_COUNT){
+        return -1;
     }
     return idx;
 }
@@ -72,14 +164,14 @@ static void switchboardSetWallpaper(void){
 }
 
 static void switchboardSetMisc(int wifiConnected){
-    FrameBufferText(272, 6, "12:31", SB_INK, 1);
+    drawDesktopClock();
     drawIcon(250, 1, wifiConnected ? &wifi_signal : &no_signal, SB_INK, 1);
 
     const SyIcon *dock[8] = {
         &menu_icn, &cell_pad, &SMS, &settings,
         &files, &camera_app_icon, &terminal_icon, &shutdown_icon
     };
-	
+
     for(int i = 0; i < DOCK_COUNT; i++){
         drawIcon(i * DOCK_PITCH + DOCK_START_X, SB_ICON_Y, dock[i], SB_INK, 1);
     }
@@ -95,19 +187,6 @@ void buildFatalErrorAlert(void){
     FrameBufferText(114, 160, "Reboot", RGB(255, 255, 255), 2);
     FrameBufferFlush();
 }
-
-/*
-void buildAlertNotification(){
-    FrameBufferClear(RGB(2, 126, 105));
-    FrameBufferBox(15, 51, 290, 138, RGB(229, 143, 206), 13, 1, RGB(255, 255, 255));
-    FrameBufferText(96, 68, "Welcome!", RGB(255, 255, 255), 2);
-    FrameBufferText(32, 102, "This is the text for this alert!", RGB(255, 255, 255), 1);
-    FrameBufferText(60, 119, "Feel free to ignore this!", RGB(255, 255, 255), 1);
-    FrameBufferBox(106, 150, 108, 24, RGB(228, 98, 168), 5, 1, RGB(255, 255, 255));
-    FrameBufferText(144, 155, "OK", RGB(255, 255, 255), 2);
-    FrameBufferFlush();
-}
-*/
 
 void enablingWifiAlert(void){
     FrameBufferClear(RGB(69, 69, 69));
@@ -155,6 +234,7 @@ static void *setupNetworkConn(void *arg){
     // No WiFi radio yet so imma set this to a dummy message. For now.
     syWaitMilliseconds(1000);
     alertSetMessage("No WiFi Radio!");
+    uartPuts("Reachability: No WiFi Radio!\n");
     syWaitMilliseconds(1000);
     return 0;
 }
@@ -183,27 +263,39 @@ void initSyntropyUserSpace(void){
 }
 
 void *syntropyDesktopMonitor(void *arg){
+    uartPuts("Welcome to syntropyOS Userspace!\n");
+    if(!SetupDoneClock){
+        syClockSetupRun();
+        SetupDoneClock = true;
+    }
+    
     for(;;){
-        // Paints the desktop, dock, icons, status bar, etc...
         switchboardDraw((currentNetwork && currentNetwork[0]) ? currentNetwork : "No Service", isReachability);
 
+        int lastMinute = syGetRealTimeSystemClock() / 60u;
+
         for(;;){
+            int minute = syGetRealTimeSystemClock() / 60u;
+            if(minute != lastMinute){
+                lastMinute = minute;
+                drawDesktopClock();
+                FrameBufferFlush();
+            }
+
             int x, y;
             if(touchScreenGet(&x, &y)){
                 int idx = dockHit(x, y);
                 if(idx >= 0){
                     syTouchscreenWaitRelease();
                     switch(idx){
-                        case 4: 
-                            diskManagerInit(); 
-                            break;
-                        default: 
-                            break;
+                        case 4: diskManagerInit(); break;
+                        default: break;
                     }
-                    break;                 
+                    break;
                 }
-                syTouchscreenWaitRelease();        
+                syTouchscreenWaitRelease();
             }
+
             syThreadYield();
         }
     }

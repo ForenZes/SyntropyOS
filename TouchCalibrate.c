@@ -9,6 +9,7 @@
 #include "Framebuffer.h"
 #include "UserSpace.h"
 #include "Kernel.h"
+#include "UART.h"
 
 #define CAL_INSET 24
 #define CAL_BG    RGB(12, 16, 34)
@@ -84,6 +85,8 @@ static void drawKV(const char *k, int v, int x, int y){
 }
 
 void touchCalibrate(void){
+    uartPuts("TouchScreen calibration is needed.\n");
+
     int tx[4] = { 
         CAL_INSET, SCREEN_W - 1 - CAL_INSET, 
         CAL_INSET, SCREEN_W - 1 - CAL_INSET 
@@ -180,6 +183,7 @@ void touchCalibrate(void){
     waitPress(&dx, &dy);
     syTouchscreenWaitRelease();
 
+    uartPuts("TouchScreen calibration succeeded!\n");
     SetupDoneAllSteps = true;
     return;
 }

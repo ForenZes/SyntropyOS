@@ -15,5 +15,5 @@ void uartPutc(char c);
 void uartPuts(const char *s);
 void uartPrintHex(uint32_t value);
 void uartPrintDec(int value);
-
+void uartPrintByteHex(uint8_t byte);
 #endif
