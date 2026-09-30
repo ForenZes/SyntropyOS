@@ -9,6 +9,9 @@
 
 #include "Kernel.h"
 
+coreStorage_t coreStorageInitStatus;
+static coreVolume_t gVolume;
+
 #define DR_REG_GPIO  0x3FF44000
 #define DR_REG_IOMUX 0x3FF49000
 #define DR_REG_DPORT 0x3FF00000
@@ -1022,3 +1025,19 @@ int fatFormat(const char *label){
     return 1;
 }
  
+void coreStorageCacheVolume(void){
+    gVolume.cardType = sdCardGetType();
+    gVolume.present = fatGetVolumeInfo(&gVolume.volume);
+}
+
+void coreStorageRefresh(void){
+    if(fatMount()){
+        coreStorageCacheVolume();
+    } else {
+        gVolume.present = 0;
+    }
+}
+
+const coreVolume_t *coreStorageVolume(void){
+    return &gVolume;
+}

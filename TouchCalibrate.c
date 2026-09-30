@@ -98,7 +98,7 @@ void touchCalibrate(void){
         FrameBufferText(FrameBufferCenterX(FrameBufferTextWidth(msg, 1)), SCREEN_H / 2 - 6, msg, CAL_INK, 1);
         drawPlus(tx[i], ty[i], CAL_MARK);
         FrameBufferFlush();
-        waitRelease();
+        syTouchscreenWaitRelease();
         waitPress(&rx[i], &ry[i]);
     }
 
@@ -159,7 +159,7 @@ void touchCalibrate(void){
     }
     TOUCH_SWAP_XY = swap;
 
-    waitRelease();
+    syTouchscreenWaitRelease();
     FrameBufferClear(CAL_BG);
     const char *title = "Calibration saved";
     FrameBufferText(FrameBufferCenterX(FrameBufferTextWidth(title, 2)), 20, title, CAL_MARK, 2);
@@ -178,7 +178,7 @@ void touchCalibrate(void){
 
     uint16_t dx, dy;
     waitPress(&dx, &dy);
-    waitRelease();
+    syTouchscreenWaitRelease();
 
     SetupDoneAllSteps = true;
     return;

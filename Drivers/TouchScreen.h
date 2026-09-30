@@ -13,7 +13,7 @@
 void initTouchScreen(void);
 int touchScreenGetRaw(uint16_t *rx, uint16_t *ry);
 int touchScreenGet(int *x, int *y);
-
+void syTouchscreenWaitRelease(void);
 // configurable through the touch screen cfg app in userland.
 extern int TOUCH_MIN_X;
 extern int TOUCH_MAX_X;

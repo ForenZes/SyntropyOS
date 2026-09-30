@@ -30,6 +30,8 @@ typedef enum {
     false, true 
 } bool;
 
+typedef int kernReturn_t;
+
 typedef enum { 
     SY_READY, 
     SY_RUNNING, 

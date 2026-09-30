@@ -226,8 +226,9 @@ uint32_t syStackHighWater(syThread_t *thread){
 }
 
 static void syArmStackWatchpoint(uint32_t *stackBase){
+    uint32_t guard = ((uint32_t)(uintptr_t)stackBase + 0x3F) & ~0x3Fu;
     uint32_t control = 0x80000000;
-    __asm__ volatile("wsr %0, 144" :: "r"(stackBase));
+    __asm__ volatile("wsr %0, 144" :: "r"(guard));
     __asm__ volatile("wsr %0, 160" :: "r"(control));
     __asm__ volatile("dsync");
 }
@@ -414,6 +415,48 @@ size_t strlen(const char *s){
     return (size_t)(p - s);
 }
 
+static int pageUsable(uint32_t addr){
+    volatile uint32_t *p = (volatile uint32_t *)addr;
+    uint32_t save = *p;
+    *p = 0xA5A5A5A5u; 
+    if(*p != 0xA5A5A5A5u){
+        *p = save; return 0; 
+    }
+    *p = 0x5A5A5A5Au; 
+    int ok = (*p == 0x5A5A5A5Au);
+    *p = save;
+    return ok;
+}
+
+void syRAMProbe(void){
+    uint32_t runStart = 0; int inRun = 0;
+    for(uint32_t a = 0x3FFAE000u; a < 0x40000000u; a += 0x1000u){
+        if(a >= 0x3FFB0000u && a < 0x3FFDC000u){                 // skip my own live DRAM
+            if(inRun){ 
+                uartPrintHex(runStart); 
+                uartPuts("-"); 
+                uartPrintHex(a); 
+                uartPuts("\n"); 
+                inRun = 0; 
+            }
+            continue;
+        }
+        if(pageUsable(a + 0x800u)){
+            if(!inRun){ 
+                runStart = a; 
+                inRun = 1; 
+            }
+        } else if(inRun){
+            uartPrintHex(runStart); 
+            uartPuts("-"); 
+            uartPrintHex(a); 
+            uartPuts("\n"); 
+            inRun = 0;
+        }
+    }
+    if(inRun){ uartPrintHex(runStart); uartPuts("-"); uartPrintHex(0x40000000u); uartPuts("\n"); }
+}
+
 static uint32_t ccount(void){
     uint32_t c;
     __asm__ volatile("rsr %0, ccount" : "=r"(c));
@@ -576,7 +619,7 @@ static void hardwareInit(void){
     initTouchScreen();
 }
 
-int initCoreStorageDevices(){
+coreStorage_t initCoreStorageDevices(){
     if(coreStorageInit()){
         uartPuts("CoreStorage: SD Initialization completed. SD Card Type = ");
         uartPrintDec(sdCardGetType());
@@ -604,6 +647,29 @@ int initCoreStorageDevices(){
     return -2;
 }
 
+kernReturn_t bootSyntropyOS(){
+    hardwareInit();
+    uartInit();
+
+    FrameBufferClear(RGB(0, 0, 0));
+    FrameBufferText(40, 108, "syntropyOS", RGB(255, 255, 255), 3);
+    FrameBufferRect(101, 215, 118, 18, RGB(255, 255, 255));
+    syWaitMilliseconds(500);
+    FrameBufferText(108, 220, "ForenZes Labs", RGB(255, 255, 255), 1);
+    FrameBufferFlush();
+
+    coreStorageInitStatus = initCoreStorageDevices();
+    if (coreStorageInitStatus == 0){
+        coreStorageCacheVolume();
+    }
+
+    if (!SetupDoneAllSteps) {
+        touchScreenCalibrationApp();
+    }
+
+    return 0;
+}
+
 void SyntropyKernelInit(void){
     disableWatchdogs();
 
@@ -612,15 +678,10 @@ void SyntropyKernelInit(void){
         *p = 0;
     }
 
-    hardwareInit();
-    uartInit();
+    bootSyntropyOS();
 
     syThreadingInit(&kernelThread);
     syVectorInit();
-
-    if (!SetupDoneAllSteps) {
-        touchScreenCalibrationApp();
-    }
 
     initSyntropyUserSpace();
 

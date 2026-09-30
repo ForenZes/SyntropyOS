@@ -3,10 +3,10 @@ ENTRY(call_start_cpu0)
 MEMORY
 {
     iram : org = 0x40080000, len = 0x20000
-    dram : org = 0x3FFB0000, len = 0x2C000
+    dram : org = 0x3FFB0000, len = 0x50000
 }
 
-_stack_top = 0x3FFDC000;
+_stack_top = 0x40000000;
 _kernel_stack_size = 0x4000;
 
 SECTIONS

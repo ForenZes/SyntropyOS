@@ -14,5 +14,6 @@
 void switchboardDraw(const char *username, int wifiConnected);
 void touchScreenCalibrationApp(void);
 void initSyntropyUserSpace(void);
+void *syntropyDesktopMonitor(void *arg);
 extern bool SetupDoneAllSteps;
 #endif

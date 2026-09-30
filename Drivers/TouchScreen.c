@@ -6,6 +6,7 @@
 // 
 
 #include "TouchScreen.h"
+#include "UART.h"
 
 int TOUCH_MIN_X = 200;
 int TOUCH_MAX_X = 3900;
@@ -26,7 +27,7 @@ int SCREEN_H = 240;
 #define GPIO_IN                 (*(volatile uint32_t*)(DR_REG_GPIO + 0x3C))
 #define GPIO_OUT1_W1TS          (*(volatile uint32_t*)(DR_REG_GPIO + 0x14))
 #define GPIO_OUT1_W1TC          (*(volatile uint32_t*)(DR_REG_GPIO + 0x18))
-#define GPIO_ENABLE1_W1TS       (*(volatile uint32_t*)(DR_REG_GPIO + 0x2C))
+#define GPIO_ENABLE1_W1TS       (*(volatile uint32_t*)(DR_REG_GPIO + 0x30))
 #define GPIO_IN1                (*(volatile uint32_t*)(DR_REG_GPIO + 0x40))
 #define GPIO_FUNC_OUT_SEL(n)    (*(volatile uint32_t*)(DR_REG_GPIO + 0x530 + (n)*4))
 
@@ -35,6 +36,11 @@ int SCREEN_H = 240;
 #define IOMUX_GPIO33 (*(volatile uint32_t*)(DR_REG_IOMUX + 0x20))
 #define IOMUX_GPIO36 (*(volatile uint32_t*)(DR_REG_IOMUX + 0x04))
 #define IOMUX_GPIO39 (*(volatile uint32_t*)(DR_REG_IOMUX + 0x10))
+
+#define RTC_IO_XTAL_32K_PAD (*(volatile uint32_t*)0x3FF4848C)
+#define RTC_GPIO_OUT        (*(volatile uint32_t*)0x3FF48400)
+#define RTC_GPIO_ENABLE     (*(volatile uint32_t*)0x3FF4840C)
+#define RTC_GPIO_IN         (*(volatile uint32_t*)0x3FF48424)
 
 #define T_CLK  25
 #define T_DIN  32
@@ -76,6 +82,8 @@ static void tdelay(void){
 }
 
 void initTouchScreen(void){
+    RTC_IO_XTAL_32K_PAD &= ~((1u << 17) | (1u << 18) | (1u << 19) | (1u << 20) | (1u << 24) | (1u << 29));
+
     IOMUX_GPIO25 = (2u << 12);
     IOMUX_GPIO32 = (2u << 12);
     IOMUX_GPIO33 = (2u << 12);
@@ -188,4 +196,11 @@ int touchScreenGet(int *x, int *y){
     *x = sx;
     *y = sy;
     return 1;
+}
+
+void syTouchscreenWaitRelease(void){
+    int x, y;
+    while(touchScreenGet(&x, &y)){
+        
+    }
 }

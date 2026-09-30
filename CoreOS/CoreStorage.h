@@ -10,6 +10,10 @@
 
 #include <stdint.h>
 
+typedef int coreStorage_t;
+
+extern coreStorage_t coreStorageInitStatus;
+
 typedef enum {
     SD_TYPE_NONE = 0,
     SD_TYPE_SD1,
@@ -34,12 +38,22 @@ typedef struct {
     uint32_t freeClusters;
 } fatVolumeInfo;
 
+typedef struct {
+    int present;
+    sdCardType_t cardType;
+    fatVolumeInfo volume;
+} coreVolume_t;
+
+
 int fatMount(void);
 int fatListRoot(fatEntry *entries, int maxEntries);
 int fatReadFile(const char *name, uint8_t *dest, uint32_t maxBytes, uint32_t *outSize);
 int fatGetVolumeInfo(fatVolumeInfo *info);
 int fatFormat(const char *label);
 
+void coreStorageCacheVolume(void);
+void coreStorageRefresh(void);
+const coreVolume_t *coreStorageVolume(void);
 int coreStorageInit(void);
 int sdReadBlock(uint32_t blockNumber, uint8_t *destination512);
 int sdWriteBlock(uint32_t blockNumber, const uint8_t *source512);

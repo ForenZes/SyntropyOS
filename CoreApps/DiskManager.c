@@ -8,6 +8,8 @@
 #include "DiskManager.h"
 #include "Framebuffer.h"
 #include "TouchScreen.h"
+#include "CoreStorage.h"
+#include "UART.h"
 
 static const uint32_t ic_43[] = {
     0x0000,
@@ -74,8 +76,8 @@ static const uint32_t ic_50[] = {
     0x0000
 };
 
-static const char *sdTypeText(void){
-    switch(sdCardGetType()){
+static const char *sdTypeText(sdCardType_t type){
+    switch(type){
         case SD_TYPE_SDHC: return "SDHC";
         case SD_TYPE_SD2:  return "SD v2";
         case SD_TYPE_SD1:  return "SD v1";
@@ -126,8 +128,9 @@ static void appendGigabytes(char *out, int *pos, uint32_t sectors){
 }
 
 void DiskManagerUI(void){
-    fatVolumeInfo vol;
-    int have = fatGetVolumeInfo(&vol);
+    const coreVolume_t *cv = coreStorageVolume();
+    int have = cv->present;
+    const fatVolumeInfo *vol = &cv->volume;
 
     FrameBufferClear(RGB(69, 69, 69));
     FrameBufferFillRect(0, 0, 320, 31, RGB(64, 118, 226));
@@ -140,7 +143,7 @@ void DiskManagerUI(void){
 
     const char *diskLabel = "No Disk";
     if(have){
-        diskLabel = (vol.fatType == 32) ? "Disk1 (FAT32)" : "Disk1 (FAT16)";
+        diskLabel = (vol->fatType == 32) ? "Disk1 (FAT32)" : "Disk1 (FAT16)";
     }
     FrameBufferText(17, 40, diskLabel, RGB(255, 255, 255), 1);
     FrameBufferIcon(2, 34, ic_50, 16, 16, RGB(255, 255, 255), 1);
@@ -152,38 +155,38 @@ void DiskManagerUI(void){
     char line[40];
     int pos;
 
-    FrameBufferText(128, 41, have ? vol.label : "No Card", RGB(255, 255, 255), 1);
+    FrameBufferText(128, 41, have ? vol->label : "No Card", RGB(255, 255, 255), 1);
 
     pos = 0;
     appendText(line, &pos, "Partition Type: ");
-    appendText(line, &pos, have ? (vol.fatType == 32 ? "FAT32" : "FAT16") : "-");
+    appendText(line, &pos, have ? (vol->fatType == 32 ? "FAT32" : "FAT16") : "-");
     FrameBufferText(128, 56, line, RGB(255, 255, 255), 1);
 
     pos = 0;
     appendText(line, &pos, "SD Card Type: ");
-    appendText(line, &pos, sdTypeText());
+    appendText(line, &pos, sdTypeText(cv->cardType));
     FrameBufferText(128, 71, line, RGB(255, 255, 255), 1);
 
     pos = 0;
     appendText(line, &pos, "Partition Style: ");
-    appendText(line, &pos, have ? styleText(vol.partitionStyle) : "-");
+    appendText(line, &pos, have ? styleText(vol->partitionStyle) : "-");
     FrameBufferText(128, 87, line, RGB(255, 255, 255), 1);
 
     pos = 0;
     appendText(line, &pos, "Capacity: ");
-    appendGigabytes(line, &pos, have ? vol.totalSectors : 0);
+    appendGigabytes(line, &pos, have ? vol->totalSectors : 0);
     FrameBufferText(128, 103, line, RGB(255, 255, 255), 1);
 
-    uint32_t freeSectors = have ? vol.freeClusters * vol.sectorsPerCluster : 0;
+    uint32_t freeSectors = have ? vol->freeClusters * vol->sectorsPerCluster : 0;
     pos = 0;
     appendText(line, &pos, "Free Space: ");
     appendGigabytes(line, &pos, freeSectors);
     FrameBufferText(128, 118, line, RGB(255, 255, 255), 1);
 
     FrameBufferFillRect(129, 136, 174, 9, RGB(64, 118, 226));
-    if(have && vol.dataClusters){
-        uint32_t used = vol.dataClusters - vol.freeClusters;
-        uint32_t usedWidth = (174u * used) / vol.dataClusters;
+    if(have && vol->dataClusters){
+        uint32_t used = vol->dataClusters - vol->freeClusters;
+        uint32_t usedWidth = (174u * used) / vol->dataClusters;
         if(usedWidth == 0 && used > 0){
             usedWidth = 1;
         }
@@ -203,49 +206,58 @@ static int inRect(int x, int y, int rx, int ry, int rw, int rh){
     return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
 }
 
-static void waitRelease(void){
-    int x, y;
-    while(touchScreenGet(&x, &y)){
-    }
+static void drawCentered(int boxX, int boxW, int y, const char *text, uint16_t color, int scale){
+    int tw = FrameBufferTextWidth(text, scale);
+    FrameBufferText(boxX + (boxW - tw) / 2, y, text, color, scale);
+}
+
+static void drawButtonLabel(int bx, int by, int bw, int bh, const char *text, uint16_t color, int scale){
+    int tw = FrameBufferTextWidth(text, scale);
+    int th = FrameBufferTextHeight(scale);
+    FrameBufferText(bx + (bw - tw) / 2, by + (bh - th) / 2, text, color, scale);
 }
 
 static void drawConfirm(void){
     FrameBufferFillRect(40, 78, 240, 92, RGB(48, 48, 52));
     FrameBufferRect(40, 78, 240, 92, RGB(255, 255, 255));
-    FrameBufferText(60, 92, "Erase ALL data on the card?", RGB(255, 255, 255), 1);
-    FrameBufferText(96, 108, "This cannot be undone.", RGB(255, 194, 194), 1);
-    FrameBufferBox(54, 128, 90, 30, RGB(64, 64, 68), 3, 1, RGB(210, 210, 210));
-    FrameBufferText(72, 135, "Cancel", RGB(255, 255, 255), 2);
-    FrameBufferBox(176, 128, 90, 30, RGB(120, 40, 40), 3, 1, RGB(255, 194, 194));
-    FrameBufferText(194, 135, "Erase", RGB(255, 194, 194), 2);
+    drawCentered(40, 240, 92, "Erase ALL data on the card?", RGB(255, 255, 255), 1);
+    drawCentered(40, 240, 108, "This cannot be undone.", RGB(255, 194, 194), 1);
+
+    FrameBufferBox(52, 128, 100, 30, RGB(64, 64, 68), 3, 1, RGB(210, 210, 210));
+    drawButtonLabel(52, 128, 100, 30, "Cancel", RGB(255, 255, 255), 2);
+
+    FrameBufferBox(168, 128, 100, 30, RGB(120, 40, 40), 3, 1, RGB(255, 194, 194));
+    drawButtonLabel(168, 128, 100, 30, "Erase", RGB(255, 194, 194), 2);
+
     FrameBufferFlush();
 }
 
 static void formatFlow(void){
     drawConfirm();
 
-    while(0){
+    for(;;){
         int cx, cy;
         if(!touchScreenGet(&cx, &cy)){
             continue;
         }
-        if(inRect(cx, cy, 54, 128, 90, 30)){
-            waitRelease();
+
+        if(inRect(cx, cy, 52, 128, 100, 30)){
+            syTouchscreenWaitRelease();
             DiskManagerUI();
             return;
         }
-        if(inRect(cx, cy, 176, 128, 90, 30)){
-            waitRelease();
+
+        if(inRect(cx, cy, 168, 128, 100, 30)){
+            syTouchscreenWaitRelease();
             FrameBufferFillRect(40, 78, 240, 92, RGB(48, 48, 52));
             FrameBufferRect(40, 78, 240, 92, RGB(255, 255, 255));
-            FrameBufferText(110, 118, "Formatting...", RGB(255, 255, 255), 2);
+            drawCentered(40, 240, 118, "Formatting...", RGB(255, 255, 255), 2);
             FrameBufferFlush();
 
-            int ok = fatFormat("SYNTROPY");
-            fatMount();
+            int syFormatStatus = fatFormat("SYNTROPY");
+            coreStorageRefresh();
             DiskManagerUI();
-
-            FrameBufferText(108, 150, ok ? "Format complete" : "Format failed", ok ? RGB(160, 255, 160) : RGB(255, 120, 120), 1);
+            FrameBufferText(128, 153, syFormatStatus ? "Format complete" : "Format failed", syFormatStatus ? RGB(160, 255, 160) : RGB(255, 120, 120), 1);
             FrameBufferFlush();
             return;
         }
@@ -255,14 +267,17 @@ static void formatFlow(void){
 void diskManagerInit(void){
     DiskManagerUI();
 
-    while(0){
+    for(;;){
         int x, y;
         if(touchScreenGet(&x, &y)){
-            if(inRect(x, y, 165, 172, 103, 25)){
-                waitRelease();
+            if(inRect(x, y, 0, 212, 44, 28)){
+                syTouchscreenWaitRelease();
+                return;
+            } else if(inRect(x, y, 165, 172, 103, 25)){
+                syTouchscreenWaitRelease();
                 formatFlow();
             } else {
-                waitRelease();
+                syTouchscreenWaitRelease();
             }
         }
         syThreadYield();

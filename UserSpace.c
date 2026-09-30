@@ -29,6 +29,27 @@ bool SetupDoneAllSteps = false;
 #define SB_BAR    RGB(58, 82, 130)
 #define SB_INK    RGB(255, 255, 255)
 #define SB_ACCENT RGB(96, 176, 255)
+#define DOCK_START_X 8
+#define DOCK_PITCH   40
+#define DOCK_COUNT   8
+
+static int dockHit(int tx, int ty){
+    if(ty < SB_DOCK_Y || ty >= SB_H){ 
+        return -1; 
+    }
+
+    int rel = tx - DOCK_START_X;
+
+    if(rel < 0){ 
+        return -1; 
+    }
+    int idx = rel / DOCK_PITCH;    
+
+    if(idx >= DOCK_COUNT){ 
+        return -1; 
+    }
+    return idx;
+}
 
 void alertSetMessage(const char *message);
 char * currentNetwork = "-";
@@ -59,8 +80,8 @@ static void switchboardSetMisc(int wifiConnected){
         &files, &camera_app_icon, &terminal_icon, &shutdown_icon
     };
 	
-    for(int i = 0; i < 8; i++){
-        drawIcon(i * 40 + 8, SB_ICON_Y, dock[i], SB_INK, 1);
+    for(int i = 0; i < DOCK_COUNT; i++){
+        drawIcon(i * DOCK_PITCH + DOCK_START_X, SB_ICON_Y, dock[i], SB_INK, 1);
     }
 }
 
@@ -103,14 +124,6 @@ void switchboardDraw(const char *username, int wifiConnected){
     switchboardSetWallpaper();
     switchboardSetMisc(wifiConnected);
     FrameBufferFlush();
-
-    if (initCoreStorageDevices() == 0) {
-        diskManagerInit();
-    } else if (initCoreStorageDevices() == -3){
-        diskManagerInit(); // the block device did initialize, but the partition is foreign or damaged. We ask if user wants to format.
-    } else {
-        diskManagerInit(); 
-    }
 }
 
 void touchScreenCalibrationApp(){
@@ -146,18 +159,8 @@ static void *setupNetworkConn(void *arg){
     return 0;
 }
 
-static void *syntropyGUI(void *arg){
-    FrameBufferFlush();
-    switchboardDraw((currentNetwork && currentNetwork[0]) ? currentNetwork : "No Service", isReachability);
-
-    while(0){
-        syThreadYield();
-    }
-    return 0;
-}
-
-static uint32_t networkConnStack[256];   // 1 KB each, static so they persist
-static uint32_t syntropyGUIStack[512];
+static uint32_t networkConnStack[256] __attribute__((aligned(64))); // 1 KB
+static uint32_t syntropyGUIStack[1024] __attribute__((aligned(64))); // 4 KB
 static syThread_t networkConnThread;
 static syThread_t syntropyGUIThread;
 
@@ -170,11 +173,39 @@ void initSyntropyUserSpace(void){
     }
     syThreadJoin(&networkConnThread);
 
-    if(syThreadCreate(&syntropyGUIThread, syntropyGUIStack, sizeof(syntropyGUIStack), syntropyGUI, 0) != 0){
+    if(syThreadCreate(&syntropyGUIThread, syntropyGUIStack, sizeof(syntropyGUIStack), syntropyDesktopMonitor, 0) != 0){
         buildFatalErrorAlert();
         while(1){
 
         }
     }
     return;
+}
+
+void *syntropyDesktopMonitor(void *arg){
+    for(;;){
+        // Paints the desktop, dock, icons, status bar, etc...
+        switchboardDraw((currentNetwork && currentNetwork[0]) ? currentNetwork : "No Service", isReachability);
+
+        for(;;){
+            int x, y;
+            if(touchScreenGet(&x, &y)){
+                int idx = dockHit(x, y);
+                if(idx >= 0){
+                    syTouchscreenWaitRelease();
+                    switch(idx){
+                        case 4: 
+                            diskManagerInit(); 
+                            break;
+                        default: 
+                            break;
+                    }
+                    break;                 
+                }
+                syTouchscreenWaitRelease();        
+            }
+            syThreadYield();
+        }
+    }
+    return 0;
 }
