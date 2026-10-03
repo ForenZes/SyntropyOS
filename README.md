@@ -21,15 +21,16 @@ This was developed and tested on 2.8 Inch ESP32 TFT Touch Display Board, those c
 - Full FAT16 and FAT32 support with formatting and GPT / MBR scheme support.
 - BASIC Interpreter with support for running integer BASIC written apps straight from the SD Card.
 
+### Apps can now run!
 I've finally implemented integer basic for syntropyOS. Now it can run BASIC apps straight from the sd card. I also fixed the FAT handling issues so that directory recursion as well as long names work fine. The app format i chose, syapp, is just a large text file with 0xBADBABE as header, app name and description on the next lines, icon bytes, then the raw BASIC code. working on an app studio web site too.
 
 The SYAPP header looks basically like this:
 ```
-0xBADBABE                      line 1  -> magic (required for app parsing)
-Counter.syapp                  line 2  -> App name, can be anything
-Taps counter demo              line 3  -> A short app description which I show in the App hub.
-0x0000 ... (16 rows)           lines 4-19 -> The App Icon bytes. Pixel art for now. :)
-10 CLS ...                     line 20+ -> Integer BASIC code, the actual app.
+0xBADBABE                      line 1      -> magic (required for app parsing)
+Counter.syapp                  line 2      -> App name, can be anything
+Taps counter demo              line 3      -> A short app description which I show in the App hub.
+0x0000 ... (16 rows)           lines 4-19  -> The App Icon bytes. Pixel art for now. :)
+10 CLS ...                     line 20     -> Integer BASIC code, the actual app.
 ```
 <p align="center">
   <img src="https://forenzes.com/assets/img/syntropyos-board.webp?v=1790673711" height="400">
