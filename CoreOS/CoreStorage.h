@@ -21,8 +21,10 @@ typedef enum {
     SD_TYPE_SDHC
 } sdCardType_t;
 
+#define FAT_LFN_MAX 63
+
 typedef struct {
-    char name[13];
+    char name[FAT_LFN_MAX + 1];
     uint32_t fileSize;
     uint32_t firstCluster;
     int isDirectory;
@@ -48,6 +50,8 @@ typedef struct {
 int fatMount(void);
 int fatListRoot(fatEntry *entries, int maxEntries);
 int fatReadFile(const char *name, uint8_t *dest, uint32_t maxBytes, uint32_t *outSize);
+int fatListDir(const char *path, fatEntry *entries, int maxEntries);
+int fatReadFileIn(const char *path, const char *name, uint8_t *dest, uint32_t maxBytes, uint32_t *outSize);
 int fatGetVolumeInfo(fatVolumeInfo *info);
 int fatFormat(const char *label);
 

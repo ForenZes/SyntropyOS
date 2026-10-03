@@ -15,6 +15,7 @@
 #include "UART.h"
 #include "DiskManager.h"
 #include "SettingsApp.h"
+#include "BasicApp.h"
 
 bool SetupDoneAllSteps = false;
 bool SetupDoneClock = false;
@@ -285,10 +286,13 @@ void *syntropyDesktopMonitor(void *arg){
 
             int x, y;
             if(touchScreenGet(&x, &y)){
-                int idx = dockHit(x, y);
-                if(idx >= 0){
+                int dockTapLocation = dockHit(x, y);
+                if(dockTapLocation >= 0){
                     syTouchscreenWaitRelease();
-                    switch(idx){
+                    switch(dockTapLocation){
+                        case 0:
+                            syAppHubInit();
+                            break;
                         case 3: 
                             initSettingsApp(); 
                             break;

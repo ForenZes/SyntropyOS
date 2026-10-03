@@ -6,7 +6,6 @@
 // 
 
 #include "CoreStorage.h"
-
 #include "Kernel.h"
 
 coreStorage_t coreStorageInitStatus;
@@ -205,13 +204,9 @@ int coreStorageInit(void){
 
     SPI3_CLOCK = SPI_CLOCK_FAST;
 
-    if(usesBlockAddressing){ 
-        detectedType = SD_TYPE_SDHC; 
-    } else if(isVersion2){ 
-        detectedType = SD_TYPE_SD2; 
-    } else { 
-        detectedType = SD_TYPE_SD1; 
-    }
+    if(usesBlockAddressing){ detectedType = SD_TYPE_SDHC; }
+    else if(isVersion2){ detectedType = SD_TYPE_SD2; }
+    else { detectedType = SD_TYPE_SD1; }
     return 1;
 }
 
@@ -288,7 +283,10 @@ static uint16_t readLe16(const uint8_t *b, int offset){
 }
  
 static uint32_t readLe32(const uint8_t *b, int offset){
-    return (uint32_t)b[offset] | ((uint32_t)b[offset + 1] << 8) | ((uint32_t)b[offset + 2] << 16) | ((uint32_t)b[offset + 3] << 24);
+    return (uint32_t)b[offset]
+         | ((uint32_t)b[offset + 1] << 8)
+         | ((uint32_t)b[offset + 2] << 16)
+         | ((uint32_t)b[offset + 3] << 24);
 }
  
 static void writeLe16(uint8_t *b, int offset, uint16_t v){
@@ -393,25 +391,25 @@ static void fillEntry(const uint8_t *raw, fatEntry *out){
 }
  
 static int isFatPartitionType(uint8_t t){
-    return t == 0x01 || t == 0x04 || t == 0x06 || t == 0x0B || t == 0x0C || t == 0x0E;
+    return t == 0x01 || t == 0x04 || t == 0x06
+        || t == 0x0B || t == 0x0C || t == 0x0E;
 }
  
 static uint32_t gptFirstPartitionLba(void){
     if(!sdReadBlock(1, sectorBuffer)){
         return 0;
     }
-    if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F' || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
+    if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F'
+    || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
         return 0;
     }
  
     uint32_t entryLba = readLe32(sectorBuffer, 72);
     uint32_t entryCount = readLe32(sectorBuffer, 80);
     uint32_t entrySize = readLe32(sectorBuffer, 84);
-
     if(entrySize == 0 || entrySize > 512){
         return 0;
     }
-
     uint32_t perSector = 512 / entrySize;
     if(perSector == 0){
         return 0;
@@ -423,17 +421,14 @@ static uint32_t gptFirstPartitionLba(void){
                 return 0;
             }
         }
-
         uint32_t off = (idx % perSector) * entrySize;
         int nonzero = 0;
-
         for(int k = 0; k < 16; k++){
             if(sectorBuffer[off + k]){
                 nonzero = 1;
                 break;
             }
         }
-
         if(nonzero){
             return readLe32(sectorBuffer, off + 32);
         }
@@ -445,16 +440,13 @@ static int looksLikeBpb(void){
     if(readLe16(sectorBuffer, 11) != 512){
         return 0;
     }
-
     uint8_t spc = sectorBuffer[13];
     if(spc == 0 || (spc & (spc - 1))){
         return 0;
     }
-
     if(readLe16(sectorBuffer, 14) == 0){
         return 0;
     }
-
     if(sectorBuffer[16] == 0){
         return 0;
     }
@@ -499,49 +491,151 @@ static int dirWalkNext(uint32_t *sectorOut){
     return 1;
 }
  
-static int scanRoot(const char *want11, fatEntry *out, fatEntry *list, int maxList){
+static void lfnExtract(const uint8_t *e, char *lfn, int posbase){
+    static const int off[13] = { 1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30 };
+    for(int k = 0; k < 13; k++){
+        int p = posbase + k;
+        if(p < 0 || p >= FAT_LFN_MAX){ continue; }
+        uint16_t u = (uint16_t)(e[off[k]] | (e[off[k] + 1] << 8));
+        if(u == 0x0000 || u == 0xFFFF){ continue; }
+        lfn[p] = (u < 0x80) ? (char)u : '?';
+    }
+}
+
+static int nameEqualCI(const char *a, const char *b){
+    int i = 0;
+    while(a[i] && b[i]){
+        int ca = a[i], cb = b[i];
+        if(ca >= 'a' && ca <= 'z'){ ca -= 32; }
+        if(cb >= 'a' && cb <= 'z'){ cb -= 32; }
+        if(ca != cb){ return 0; }
+        i++;
+    }
+    return a[i] == 0 && b[i] == 0;
+}
+
+static void copyName(char *dst, const char *src){
+    int i = 0;
+    while(src[i] && i < FAT_LFN_MAX){ dst[i] = src[i]; i++; }
+    dst[i] = 0;
+}
+
+static int dirScan(uint32_t startCluster, int fixedRoot, const char *wantName, fatEntry *out, fatEntry *list, int maxList){
+    char lfn[FAT_LFN_MAX + 1];
+    int haveLfn = 0;
     int count = 0;
-    uint32_t sector;
- 
-    dirWalkStart();
-    while(dirWalkNext(&sector)){
-        if(!sdReadBlock(sector, sectorBuffer)){
-            break;
+
+    uint32_t cluster = startCluster;
+    uint32_t sub = 0;
+    uint32_t fixedIndex = 0;
+
+    for(;;){
+        uint32_t sector;
+        if(fixedRoot){
+            if(fixedIndex >= rootDirSectors){ break; }
+            sector = rootDirStartSector + fixedIndex;
+            fixedIndex++;
+        } else {
+            if(cluster < 2 || clusterIsEnd(cluster)){ break; }
+            sector = clusterFirstSector(cluster) + sub;
+            sub++;
+            if(sub >= sectorsPerCluster){ sub = 0; cluster = fatNextCluster(cluster); }
         }
+
+        if(!sdReadBlock(sector, sectorBuffer)){ return wantName ? 0 : count; }
+
         for(int e = 0; e < 512; e += 32){
             uint8_t first = sectorBuffer[e];
-            if(first == 0x00){
-                return want11 ? 0 : count;
-            }
-            if(first == 0xE5){
-                continue;
-            }
+            if(first == 0x00){ return wantName ? 0 : count; }
+            if(first == 0xE5){ haveLfn = 0; continue; }
+
             uint8_t attr = sectorBuffer[e + 11];
-            if(attr == 0x0F || (attr & 0x08)){
+            if(attr == 0x0F){
+                int seq = first & 0x1F;
+                if(first & 0x40){
+                    for(int z = 0; z <= FAT_LFN_MAX; z++){ lfn[z] = 0; }
+                }
+                if(seq >= 1){ lfnExtract(&sectorBuffer[e], lfn, (seq - 1) * 13); }
+                haveLfn = 1;
                 continue;
             }
-            if(want11){
-                int match = 1;
-                for(int i = 0; i < 11; i++){
-                    if(sectorBuffer[e + i] != (uint8_t)want11[i]){
-                        match = 0;
-                        break;
-                    }
-                }
-                if(match){
+            if(attr & 0x08){ haveLfn = 0; continue; }
+
+            char disp[FAT_LFN_MAX + 1];
+            if(haveLfn){ copyName(disp, lfn); }
+            else { shortNameToText(&sectorBuffer[e], disp); }
+            haveLfn = 0;
+
+            if(wantName){
+                if(nameEqualCI(disp, wantName)){
                     fillEntry(&sectorBuffer[e], out);
+                    copyName(out->name, disp);
                     return 1;
                 }
             } else {
-                if(count >= maxList){
-                    return count;
-                }
+                if(count >= maxList){ return count; }
                 fillEntry(&sectorBuffer[e], &list[count]);
+                copyName(list[count].name, disp);
                 count++;
             }
         }
     }
-    return want11 ? 0 : count;
+    return wantName ? 0 : count;
+}
+
+static int dirScanRoot(const char *wantName, fatEntry *out, fatEntry *list, int maxList){
+    if(fatType == 32){ return dirScan(rootCluster, 0, wantName, out, list, maxList); }
+    return dirScan(0, 1, wantName, out, list, maxList);
+}
+
+static int readEntryData(const fatEntry *found, uint8_t *dest, uint32_t maxBytes, uint32_t *outSize){
+    if(outSize){ *outSize = found->fileSize; }
+    if(found->isDirectory){ return -1; }
+    uint32_t remaining = found->fileSize;
+    if(remaining > maxBytes){ remaining = maxBytes; }
+    uint32_t copied = 0;
+    uint32_t cluster = found->firstCluster;
+    while(cluster >= 2 && !clusterIsEnd(cluster) && copied < remaining){
+        uint32_t sector = clusterFirstSector(cluster);
+        for(uint32_t s = 0; s < sectorsPerCluster && copied < remaining; s++){
+            if(!sdReadBlock(sector + s, sectorBuffer)){ return (int)copied; }
+            uint32_t chunk = remaining - copied;
+            if(chunk > 512){ chunk = 512; }
+            for(uint32_t i = 0; i < chunk; i++){ dest[copied + i] = sectorBuffer[i]; }
+            copied += chunk;
+        }
+        cluster = fatNextCluster(cluster);
+    }
+    return (int)copied;
+}
+
+static int resolveDirCluster(const char *path, uint32_t *clusterOut, int *isRootOut){
+    while(*path == '/'){ path++; }
+    if(*path == 0){ *isRootOut = 1; *clusterOut = 0; return 1; }
+
+    int atRoot = 1;
+    uint32_t cluster = 0;
+    char comp[FAT_LFN_MAX + 1];
+
+    while(*path){
+        int n = 0;
+        while(*path && *path != '/'){
+            if(n < FAT_LFN_MAX){ comp[n++] = *path; }
+            path++;
+        }
+        comp[n] = 0;
+        while(*path == '/'){ path++; }
+        if(n == 0){ continue; }
+
+        fatEntry found;
+        int ok = atRoot ? dirScanRoot(comp, &found, 0, 0) : dirScan(cluster, 0, comp, &found, 0, 0);
+        if(!ok || !found.isDirectory){ return 0; }
+        cluster = found.firstCluster;
+        atRoot = 0;
+    }
+    *isRootOut = 0;
+    *clusterOut = cluster;
+    return 1;
 }
  
 int fatMount(void){
@@ -713,52 +807,35 @@ int fatGetVolumeInfo(fatVolumeInfo *info){
 }
  
 int fatListRoot(fatEntry *entries, int maxEntries){
-    return scanRoot(0, 0, entries, maxEntries);
+    return dirScanRoot(0, 0, entries, maxEntries);
 }
- 
+
 int fatReadFile(const char *name, uint8_t *dest, uint32_t maxBytes, uint32_t *outSize){
-    char target[11];
-    makeShortName(name, target);
- 
     fatEntry found;
-    if(!scanRoot(target, &found, 0, 0)){
-        return -1;
-    }
-    if(outSize){
-        *outSize = found.fileSize;
-    }
-    if(found.isDirectory){
-        return -1;
-    }
- 
-    uint32_t remaining = found.fileSize;
-    if(remaining > maxBytes){
-        remaining = maxBytes;
-    }
- 
-    uint32_t copied = 0;
-    uint32_t cluster = found.firstCluster;
- 
-    while(cluster >= 2 && !clusterIsEnd(cluster) && copied < remaining){
-        uint32_t sector = clusterFirstSector(cluster);
-        for(uint32_t s = 0; s < sectorsPerCluster && copied < remaining; s++){
-            if(!sdReadBlock(sector + s, sectorBuffer)){
-                return (int)copied;
-            }
-            uint32_t chunk = remaining - copied;
-            if(chunk > 512){
-                chunk = 512;
-            }
-            for(uint32_t i = 0; i < chunk; i++){
-                dest[copied + i] = sectorBuffer[i];
-            }
-            copied += chunk;
-        }
-        cluster = fatNextCluster(cluster);
-    }
-    return (int)copied;
+    if(!dirScanRoot(name, &found, 0, 0)){ return -1; }
+    return readEntryData(&found, dest, maxBytes, outSize);
 }
- 
+
+int fatListDir(const char *path, fatEntry *entries, int maxEntries){
+    if(!mounted){ return 0; }
+    uint32_t cluster;
+    int isRoot;
+    if(!resolveDirCluster(path, &cluster, &isRoot)){ return 0; }
+    if(isRoot){ return dirScanRoot(0, 0, entries, maxEntries); }
+    return dirScan(cluster, 0, 0, 0, entries, maxEntries);
+}
+
+int fatReadFileIn(const char *path, const char *name, uint8_t *dest, uint32_t maxBytes, uint32_t *outSize){
+    if(!mounted){ return -1; }
+    uint32_t cluster;
+    int isRoot;
+    if(!resolveDirCluster(path, &cluster, &isRoot)){ return -1; }
+    fatEntry found;
+    int ok = isRoot ? dirScanRoot(name, &found, 0, 0) : dirScan(cluster, 0, name, &found, 0, 0);
+    if(!ok){ return -1; }
+    return readEntryData(&found, dest, maxBytes, outSize);
+}
+
 static int resolvePartition(uint32_t *startOut, uint32_t *countOut){
     if(!sdReadBlock(0, sectorBuffer)){
         return 0;
@@ -779,25 +856,20 @@ static int resolvePartition(uint32_t *startOut, uint32_t *countOut){
         if(!sdReadBlock(1, sectorBuffer)){
             return 0;
         }
-
-        if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F' || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
+        if(sectorBuffer[0] != 'E' || sectorBuffer[1] != 'F'
+        || sectorBuffer[2] != 'I' || sectorBuffer[3] != ' '){
             return 0;
         }
-
         uint32_t entryLba = readLe32(sectorBuffer, 72);
         uint32_t entryCount = readLe32(sectorBuffer, 80);
         uint32_t entrySize = readLe32(sectorBuffer, 84);
-
         if(entrySize == 0 || entrySize > 512){
             return 0;
         }
-
         uint32_t perSector = 512 / entrySize;
-
         if(perSector == 0){
             return 0;
         }
-
         for(uint32_t idx = 0; idx < entryCount; idx++){
             if(idx % perSector == 0){
                 if(!sdReadBlock(entryLba + idx / perSector, sectorBuffer)){
@@ -806,14 +878,12 @@ static int resolvePartition(uint32_t *startOut, uint32_t *countOut){
             }
             uint32_t off = (idx % perSector) * entrySize;
             int nonzero = 0;
-
             for(int k = 0; k < 16; k++){
                 if(sectorBuffer[off + k]){
                     nonzero = 1;
                     break;
                 }
             }
-
             if(nonzero){
                 uint32_t first = readLe32(sectorBuffer, off + 32);
                 uint32_t last = readLe32(sectorBuffer, off + 40);
@@ -843,7 +913,6 @@ static void writeLabelEntry(uint8_t *b, const char *label){
     for(int i = 0; i < 11; i++){
         b[i] = ' ';
     }
-    
     for(int i = 0; i < 11 && label[i]; i++){
         b[i] = (uint8_t)upcase(label[i]);
     }
