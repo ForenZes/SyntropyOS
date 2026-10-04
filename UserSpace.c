@@ -20,21 +20,27 @@
 bool SetupDoneAllSteps = false;
 bool SetupDoneClock = false;
 
-#define SB_W 320
-#define SB_H 240
-#define SB_STATUS_H 18
-#define SB_DOCK_H 40
-#define SB_DOCK_Y (SB_H - SB_DOCK_H)
-#define SB_ICON 24
-#define SB_ICON_Y (SB_DOCK_Y + (SB_DOCK_H - SB_ICON) / 2)
+#define DT_BG   RGB(85, 119, 85)
+#define DT_BAR  RGB(102, 143, 102)
+#define DT_INK  RGB(163, 215, 164)
+#define DT_DIM  RGB(127, 164, 127)
+#define DT_LINE RGB(68, 95, 68)
+#define DT_LOGO RGB(114, 151, 114)
 
-#define SB_BG     RGB(24, 28, 52)
-#define SB_BAR    RGB(58, 82, 130)
-#define SB_INK    RGB(255, 255, 255)
-#define SB_ACCENT RGB(96, 176, 255)
-#define DOCK_START_X 8
-#define DOCK_PITCH   40
-#define DOCK_COUNT   8
+#define OVL_BG  RGB(59, 79, 59)
+#define OVL_ROW RGB(93, 131, 94)
+#define OVL_X   0
+#define OVL_Y   32
+#define OVL_W   210
+#define OVL_H   191
+
+#define BAR_H         31
+#define APPS_RIGHT    114
+#define SHUTDOWN_LEFT 292
+
+#define CLOCK_X     207
+#define CLOCK_Y     8
+#define CLOCK_SCALE 2
 
 static int inRect(int x, int y, int rx, int ry, int rw, int rh){
     return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
@@ -52,8 +58,9 @@ static void formatHHMM(uint32_t secOfDay, char *out){
 static void drawDesktopClock(void){
     char buf[6];
     formatHHMM(syGetRealTimeSystemClock() % 86400u, buf);
-    FrameBufferFillRect(272, 6, 40, 8, SB_BAR);
-    FrameBufferText(272, 6, buf, SB_INK, 1);
+    int w = FrameBufferTextWidth(buf, CLOCK_SCALE);
+    FrameBufferFillRect(CLOCK_X, CLOCK_Y, w, 8 * CLOCK_SCALE, DT_BAR);
+    FrameBufferText(CLOCK_X, CLOCK_Y, buf, DT_INK, CLOCK_SCALE);
 }
 
 void syClockSetupUI(void){
@@ -127,57 +134,9 @@ void syClockSetupRun(void){
     }
 }
 
-static int dockHit(int tx, int ty){
-    if(ty < SB_DOCK_Y || ty >= SB_H){
-        return -1;
-    }
-
-    int rel = tx - DOCK_START_X;
-
-    if(rel < 0){
-        return -1;
-    }
-    int idx = rel / DOCK_PITCH;
-
-    if(idx >= DOCK_COUNT){
-        return -1;
-    }
-    return idx;
-}
-
 void alertSetMessage(const char *message);
 char * currentNetwork = "-";
 bool isReachability = false;
-
-static void drawIcon(int x, int y, const SyIcon *ic, uint16_t color, int scale){
-    FrameBufferIcon(x, y, ic->data, ic->w, ic->h, color, scale);
-}
-
-static void switchboardSetBars(uint16_t color){
-    FrameBufferBox(0, 0, SB_W, SB_STATUS_H, color, 0, 0, 0);
-    FrameBufferBox(0, SB_DOCK_Y, SB_W, SB_DOCK_H, color, 0, 0, 0);
-    FrameBufferLine(0, SB_DOCK_Y, SB_W - 1, SB_DOCK_Y, SB_ACCENT);
-}
-
-static void switchboardSetWallpaper(void){
-    const char *title = "SyntropyOS";
-    int tw = FrameBufferTextWidth(title, 3);
-    FrameBufferText(FrameBufferCenterX(tw), 96, title, SB_INK, 3);
-}
-
-static void switchboardSetMisc(int wifiConnected){
-    drawDesktopClock();
-    drawIcon(250, 1, wifiConnected ? &wifi_signal : &no_signal, SB_INK, 1);
-
-    const SyIcon *dock[8] = {
-        &menu_icn, &cell_pad, &SMS, &settings,
-        &files, &camera_app_icon, &terminal_icon, &shutdown_icon
-    };
-
-    for(int i = 0; i < DOCK_COUNT; i++){
-        drawIcon(i * DOCK_PITCH + DOCK_START_X, SB_ICON_Y, dock[i], SB_INK, 1);
-    }
-}
 
 void buildFatalErrorAlert(void){
     FrameBufferClear(RGB(2, 126, 105));
@@ -198,13 +157,102 @@ void enablingWifiAlert(void){
     FrameBufferFlush();
 }
 
-void switchboardDraw(const char *username, int wifiConnected){
-    FrameBufferClear(SB_BG);
-    switchboardSetBars(SB_BAR);
-    FrameBufferText(4, 6, username, SB_INK, 1);
-    switchboardSetWallpaper();
-    switchboardSetMisc(wifiConnected);
+void syntropyDesktopDraw(void){
+    FrameBufferClear(DT_BG);
+    FrameBufferFillRect(0, 0, 320, 31, DT_BAR);
+    FrameBufferBox(5, 3, 101, 25, DT_BG, 4, 1, DT_LINE);
+    FrameBufferIcon(6, 0, appsLauncherIcon, 16, 16, DT_INK, 2);
+    FrameBufferText(39, 7, "Apps", DT_INK, 2);
+    FrameBufferLine(114, 0, 114, 30, DT_LINE);
+    FrameBufferLine(142, 0, 142, 30, DT_LINE);
+    FrameBufferLine(170, 0, 170, 30, DT_LINE);
+    FrameBufferLine(198, 0, 198, 30, DT_LINE);
+    FrameBufferLine(292, 0, 292, 30, DT_LINE);
+    FrameBufferIcon(119, 7, noSignalIcon, 16, 16, DT_INK, 1);
+    FrameBufferIcon(148, 8, soundOffIcon, 16, 16, DT_INK, 1);
+    FrameBufferIcon(176, 8, batteryIcon, 16, 16, DT_INK, 1);
+    drawDesktopClock();
+    FrameBufferIcon(298, 7, shutdownIcon, 16, 16, DT_INK, 1);
+    FrameBufferLine(0, 31, 318, 31, DT_LINE);
+    FrameBufferIcon(112, 72, backgroundSyntropyIcon, 16, 16, DT_LOGO, 6);
+    FrameBufferText(4, 220, "syntropyOS", DT_DIM, 2);
     FrameBufferFlush();
+}
+
+static void syntropyAppsMenuDraw(void){
+    FrameBufferFillRect(OVL_X, OVL_Y, OVL_W, OVL_H, OVL_BG);
+    FrameBufferFillRect(3, 35, 204, 27, OVL_ROW);
+    FrameBufferFillRect(3, 64, 204, 27, OVL_ROW);
+    FrameBufferFillRect(3, 93, 204, 27, OVL_ROW);
+    FrameBufferFillRect(3, 122, 204, 27, OVL_ROW);
+    FrameBufferFillRect(3, 151, 204, 27, OVL_ROW);
+    FrameBufferRect(5, 36, 24, 24, OVL_BG);
+    FrameBufferRect(5, 65, 24, 24, OVL_BG);
+    FrameBufferRect(5, 94, 24, 24, OVL_BG);
+    FrameBufferRect(5, 123, 24, 24, OVL_BG);
+    FrameBufferRect(5, 152, 24, 24, OVL_BG);
+    FrameBufferIcon(9, 40, settingsIcon, 16, 16, DT_INK, 1);
+    FrameBufferText(33, 41, "Settings", DT_INK, 2);
+    FrameBufferIcon(9, 69, appsHubIcon, 16, 16, DT_INK, 1);
+    FrameBufferText(33, 69, "Apps Hub", DT_INK, 2);
+    FrameBufferIcon(9, 97, filesIcon, 16, 16, RGB(176, 221, 177), 1);
+    FrameBufferText(33, 99, "Files", DT_INK, 2);
+    FrameBufferIcon(8, 127, calculatorIcon, 16, 16, DT_INK, 1);
+    FrameBufferText(33, 128, "Calculator", DT_INK, 2);
+    FrameBufferIcon(9, 156, calendarIcon, 16, 16, DT_INK, 1);
+    FrameBufferText(33, 157, "Calendar", DT_INK, 2);
+    FrameBufferFlush();
+}
+
+static int appsMenuRowHit(int x, int y){
+    if(x < 3 || x >= 207){
+        return -1;
+    }
+    int tops[5] = { 35, 64, 93, 122, 151 };
+    for(int i = 0; i < 5; i++){
+        if(y >= tops[i] && y < tops[i] + 27){
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void syntropyAppsMenu(void){
+    syntropyAppsMenuDraw();
+
+    for(;;){
+        int x, y;
+        if(touchScreenGet(&x, &y)){
+            syTouchscreenWaitRelease();
+            if(y < BAR_H && x < APPS_RIGHT){
+                return;
+            }
+            int row = appsMenuRowHit(x, y);
+            if(row == 0){
+                initSettingsApp();
+                return;
+            } else if(row == 1){
+                syAppHubInit();
+                return;
+            } else if(row >= 2){
+                // Files, Calculator, Calendar: no app yet
+            } else if(!inRect(x, y, OVL_X, OVL_Y, OVL_W, OVL_H)){
+                return;
+            }
+        }
+        syThreadYield();
+    }
+}
+
+static void syntropyPowerOff(void){
+    FrameBufferClear(DT_BG);
+    const char *msg = "Rebooting...";
+    FrameBufferText(FrameBufferCenterX(FrameBufferTextWidth(msg, 2)), 108, msg, DT_INK, 2);
+    FrameBufferFlush();
+    uartPuts("syntropyOS: reboot requested\n");
+    syWaitMilliseconds(1000);
+    hwForceReboot();
+    while(1){ }
 }
 
 void touchScreenCalibrationApp(){
@@ -272,8 +320,7 @@ void *syntropyDesktopMonitor(void *arg){
     }
 
     for(;;){
-        switchboardDraw((currentNetwork && currentNetwork[0]) ? currentNetwork : "No Service", isReachability);
-
+        syntropyDesktopDraw();
         int lastMinute = syGetRealTimeSystemClock() / 60u;
 
         for(;;){
@@ -286,24 +333,16 @@ void *syntropyDesktopMonitor(void *arg){
 
             int x, y;
             if(touchScreenGet(&x, &y)){
-                int dockTapLocation = dockHit(x, y);
-                if(dockTapLocation >= 0){
+                if(y < BAR_H && x < APPS_RIGHT){
                     syTouchscreenWaitRelease();
-                    switch(dockTapLocation){
-                        case 0:
-                            syAppHubInit();
-                            break;
-                        case 3: 
-                            initSettingsApp(); 
-                            break;
-                        case 4: 
-                            diskManagerInit(); 
-                            break;
-                        default: break;
-                    }
+                    syntropyAppsMenu();
                     break;
+                } else if(y < BAR_H && x >= SHUTDOWN_LEFT){
+                    syTouchscreenWaitRelease();
+                    syntropyPowerOff();
+                } else {
+                    syTouchscreenWaitRelease();
                 }
-                syTouchscreenWaitRelease();
             }
 
             syThreadYield();
