@@ -1,5 +1,5 @@
-# SyntropyOS
-SyntropyOS is a bare-metal operating system for the ESP32 devices with ILI9341 TFT touchscreen displays. Syntropy features a graphical user interface, cooperative multitasking, UART, FrameBuffer, and many features soon to come.
+# syntropyOS
+syntropyOS is a bare-metal operating system for the ESP32 devices with ILI9341 TFT touchscreen displays. Syntropy features a graphical user interface, cooperative multitasking, UART, FrameBuffer, and many features soon to come.
 
 <p align="center">
   <img src="https://forenzes.com/assets/img/board-syntropyos-trans.webp?v=1790677903" height="200">
